@@ -4,11 +4,6 @@
 
 #define MEMSIZE 1000
 
-int memory[MEMSIZE] = {0};
-int mem_start = 0;
-int registers[32] = {0};
-int pc = 0;
-
 typedef struct IFIDregister {
   int new_pc;
   int instruction;
@@ -37,7 +32,7 @@ typedef struct IDEXregister {
   bool regDst;
   bool ALUOp;
   bool ALUSrc;
-}
+} IDEX;
 
 //Same deal as with IFID, but now with IDEX
 IDEX IDo;
@@ -49,12 +44,13 @@ typedef struct EXMEMregister {
   int ALU_result;
   int valb;
   int dest;
+  int instruction;
 
   bool memRead;
   bool memWrite;
   bool RegWrite;
   bool memToReg;
-}
+} EXMEM;
 
 //and again!
 EXMEM EXo;
@@ -68,12 +64,14 @@ typedef struct MEMWBregister {
 
   bool RegWrite;
   bool memToReg;
-}
+} MEMWB;
 
 //AND ANOTHER ONE
 MEMWB MEMo;
 MEMWB WBi;
 MEMWB emptyMEMWB;
+
+int ALU(int vala, int valb, int instruction);
 
 void init();
 

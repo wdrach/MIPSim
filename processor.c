@@ -1,12 +1,17 @@
-#include <processor.h>
+#include "processor.h"
+
+int memory[MEMSIZE] = {0};
+int mem_start = 0;
+int registers[32] = {0};
+int pc = 0;
 
 void init() {
   //zero out EVERYTHING
 
   emptyIFID.new_pc = 0;
   emptyIFID.instruction = 0;
-  IFo = empty;
-  IDi = empty;
+  IFo = emptyIFID;
+  IDi = emptyIFID;
 
   emptyIDEX.new_pc = 0;
   emptyIDEX.instruction = 0;
@@ -34,7 +39,6 @@ void init() {
   MEMi = emptyEXMEM;
 
   emptyMEMWB.data = 0;
-  emptyMEMWB.result = 0;
   emptyMEMWB.dest = 0;
   emptyMEMWB.RegWrite = false;
   emptyMEMWB.memToReg = false;
@@ -59,7 +63,7 @@ void clock() {
 
 void IF() {
   IFo.new_pc = pc + 1;
-  instruction = memory[pc];
+  IFo.instruction = memory[pc];
 }
 void ID() {
   //the simple forwarding of some registers
@@ -77,9 +81,10 @@ void EX() {
   EXo.memRead = EXi.memRead;
   EXo.memWrite = EXi.memWrite;
   EXo.memToReg = EXi.memToReg;
+  EXo.instruction = EXi.instruction;
 
   EXo.ALU_result = ALU(EXi.vala, EXi.valb, EXi.instruction);
-  //TODO: add special case of jump instruction
+  //TODO: add special case of jumps and branches
 }
 
 void MEM() {
@@ -100,9 +105,10 @@ void MEM() {
     switch (opcode) {
       case 0x20:
         //load byte
-      case 0x24:
+      case 0x24: {
         //load unsigned byte
-        int data;
+        int data = 0;
+
         switch (MEMi.ALU_result%4) {
           case 0:
             data = 0x000000FF & full_word;
@@ -120,9 +126,10 @@ void MEM() {
         //sign extend if needed
         if (opcode == 0x20) data = data&0x80 ? data|0xFFFFFF00 : data;
         break;
+      }
       case 0x21:
         //Load unsigned halfword
-      case 0x25:
+      case 0x25: {
         //Load halfword
         //very similar to byte, just different adjustments
         int data;
@@ -138,18 +145,20 @@ void MEM() {
         //sign extend
         if (opcode == 0x20) data = data&0x8000 ? data|0xFFFF0000 : data;
         break;
+      }
       case 0x22:
         //Load word right (C division will do this for us)
       case 0x23:
         //Load word
         MEMo.data = full_word;
         break;
-      case 0x26:
+      case 0x26: {
         //Load word left
         int addr = (MEMi.ALU_result - mem_start)/4;
         addr += MEMi.ALU_result%4 == 0 ? 0 : 1;
         MEMo.data = memory[addr];
         break;
+      }
     }
   }
   else MEMo.data = 0;
@@ -163,19 +172,19 @@ void MEM() {
         switch (MEMi.ALU_result%4) {
           case 0:
             memory[addr] &= 0xFFFFFF00;
-            memory[addr] += MEMi.data;
+            memory[addr] += MEMi.valb;
             break;
           case 1:
             memory[addr] &= 0xFFFF00FF;
-            memory[addr] += MEMi.data<<8;
+            memory[addr] += MEMi.valb<<8;
             break;
           case 2:
             memory[addr] &= 0xFF00FFFF;
-            memory[addr] += MEMi.data<<16;
+            memory[addr] += MEMi.valb<<16;
             break;
           case 3:
             memory[addr] &= 0x00FFFFFF;
-            memory[addr] += MEMi.data<<24;
+            memory[addr] += MEMi.valb<<24;
             break;
         }
         break;
@@ -184,11 +193,11 @@ void MEM() {
         switch (MEMi.ALU_result%8) {
           case 0:
             memory[addr] &= 0xFFFF0000;
-            memory[addr] += MEMi.data;
+            memory[addr] += MEMi.valb;
             break;
           case 1:
             memory[addr] &= 0x0000FFFF;
-            memory[addr] += MEMi.data;
+            memory[addr] += MEMi.valb;
             break;
         }
         break;
@@ -213,4 +222,8 @@ void MEM() {
 void WB() {
   //if we need to write, write!
   if (WBi.RegWrite) registers[WBi.dest] = WBi.memToReg ? WBi.data : WBi.ALU_result;
+}
+
+int ALU(int vala, int valb, int instruction) {
+  return 0;
 }
