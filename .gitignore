@@ -1,0 +1,5 @@
+.env
+*.un~
+*.swp
+.DS_Store
+.tern-project

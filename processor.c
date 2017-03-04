@@ -1,0 +1,216 @@
+#include <processor.h>
+
+void init() {
+  //zero out EVERYTHING
+
+  emptyIFID.new_pc = 0;
+  emptyIFID.instruction = 0;
+  IFo = empty;
+  IDi = empty;
+
+  emptyIDEX.new_pc = 0;
+  emptyIDEX.instruction = 0;
+  emptyIDEX.vala = 0;
+  emptyIDEX.valb = 0;
+  emptyIDEX.memRead = false;
+  emptyIDEX.memWrite = false;
+  emptyIDEX.branch = false;
+  emptyIDEX.memToReg = false;
+  emptyIDEX.dest = 0;
+  emptyIDEX.regDst = false;
+  emptyIDEX.ALUOp = false;
+  emptyIDEX.ALUSrc = false;
+  IDo = emptyIDEX;
+  EXi = emptyIDEX;
+
+  emptyEXMEM.new_pc = 0;
+  emptyEXMEM.ALU_result = 0;
+  emptyEXMEM.valb = 0;
+  emptyEXMEM.dest = 0;
+  emptyEXMEM.memRead = false;
+  emptyEXMEM.memWrite = false;
+  emptyEXMEM.memToReg = false;
+  EXo = emptyEXMEM;
+  MEMi = emptyEXMEM;
+
+  emptyMEMWB.data = 0;
+  emptyMEMWB.result = 0;
+  emptyMEMWB.dest = 0;
+  emptyMEMWB.RegWrite = false;
+  emptyMEMWB.memToReg = false;
+  MEMo = emptyMEMWB;
+  WBi = emptyMEMWB;
+}
+
+void clock() {
+  //update registers
+  IDi = IFo;
+  EXi = IDo;
+  MEMi = EXo;
+  WBi = MEMo;
+
+  //run through the cycles
+  IF();
+  ID();
+  EX();
+  MEM();
+  WB();
+};
+
+void IF() {
+  IFo.new_pc = pc + 1;
+  instruction = memory[pc];
+}
+void ID() {
+  //the simple forwarding of some registers
+  IDo.new_pc = IDi.new_pc;
+  IDo.instruction = IDi.instruction;
+
+  //TODO set vala, valb, memRead, memWrite, branch, memToReg, dest, regWrite
+}
+void EX() {
+  //simple forwarding
+  EXo.new_pc = EXi.new_pc;
+  EXo.valb = EXi.valb;
+  EXo.dest = EXi.dest;
+  EXo.RegWrite = EXi.RegWrite;
+  EXo.memRead = EXi.memRead;
+  EXo.memWrite = EXi.memWrite;
+  EXo.memToReg = EXi.memToReg;
+
+  EXo.ALU_result = ALU(EXi.vala, EXi.valb, EXi.instruction);
+  //TODO: add special case of jump instruction
+}
+
+void MEM() {
+  //simple forwarding
+  MEMo.ALU_result = MEMi.ALU_result;
+  MEMo.dest = MEMi.dest;
+  MEMo.RegWrite = MEMi.RegWrite;
+  MEMo.memToReg = MEMi.memToReg;
+
+  //TODO: byte align? Do we have to divide this by 4?
+  //if we need to read from memory, do so.
+  int opcode = (MEMi.instruction & 0xFC000000)>>26;
+
+  //load instructions
+  if (MEMi.memRead) {
+    int full_word = memory[(MEMi.ALU_result - mem_start)/4];
+
+    switch (opcode) {
+      case 0x20:
+        //load byte
+      case 0x24:
+        //load unsigned byte
+        int data;
+        switch (MEMi.ALU_result%4) {
+          case 0:
+            data = 0x000000FF & full_word;
+            break;
+          case 1:
+            data = (0x0000FF00 & full_word)>>8;
+            break;
+          case 2:
+            data = (0x00FF0000 & full_word)>>16;
+            break;
+          case 3:
+            data = (0xFF000000 & full_word)>>24;
+            break;
+        }
+        //sign extend if needed
+        if (opcode == 0x20) data = data&0x80 ? data|0xFFFFFF00 : data;
+        break;
+      case 0x21:
+        //Load unsigned halfword
+      case 0x25:
+        //Load halfword
+        //very similar to byte, just different adjustments
+        int data;
+        switch(MEMi.ALU_result%2) {
+          case 0:
+            data = 0x0000FFFF & full_word;
+            break;
+          case 1:
+            data = (0xFFFF0000 & full_word)>>16;
+            break;
+        }
+
+        //sign extend
+        if (opcode == 0x20) data = data&0x8000 ? data|0xFFFF0000 : data;
+        break;
+      case 0x22:
+        //Load word right (C division will do this for us)
+      case 0x23:
+        //Load word
+        MEMo.data = full_word;
+        break;
+      case 0x26:
+        //Load word left
+        int addr = (MEMi.ALU_result - mem_start)/4;
+        addr += MEMi.ALU_result%4 == 0 ? 0 : 1;
+        MEMo.data = memory[addr];
+        break;
+    }
+  }
+  else MEMo.data = 0;
+
+  //similar to all of the read stuff, just with write
+  if (MEMi.memWrite) {
+    int addr = (MEMi.ALU_result - mem_start)/4;
+    switch (opcode) {
+      case 0x28:
+        //store byte
+        switch (MEMi.ALU_result%4) {
+          case 0:
+            memory[addr] &= 0xFFFFFF00;
+            memory[addr] += MEMi.data;
+            break;
+          case 1:
+            memory[addr] &= 0xFFFF00FF;
+            memory[addr] += MEMi.data<<8;
+            break;
+          case 2:
+            memory[addr] &= 0xFF00FFFF;
+            memory[addr] += MEMi.data<<16;
+            break;
+          case 3:
+            memory[addr] &= 0x00FFFFFF;
+            memory[addr] += MEMi.data<<24;
+            break;
+        }
+        break;
+      case 0x29:
+        //store halfword
+        switch (MEMi.ALU_result%8) {
+          case 0:
+            memory[addr] &= 0xFFFF0000;
+            memory[addr] += MEMi.data;
+            break;
+          case 1:
+            memory[addr] &= 0x0000FFFF;
+            memory[addr] += MEMi.data;
+            break;
+        }
+        break;
+      case 0x2A:
+        //store word left
+        addr += MEMi.ALU_result%4 == 0 ? 0 : 1;
+        memory[addr] = MEMi.valb;
+        break;
+      case 0x2B:
+        //store word
+      case 0x2e:
+        //store word right
+      case 0x38:
+        //store conditional
+        //TODO: properly implement this?
+        memory[addr] = MEMi.valb;
+        break;
+    }
+  }
+}
+
+void WB() {
+  //if we need to write, write!
+  if (WBi.RegWrite) registers[WBi.dest] = WBi.memToReg ? WBi.data : WBi.ALU_result;
+}
