@@ -67,15 +67,67 @@ void clock() {
 };
 
 void IF() {
+  IFo = emptyIFID;
   IFo.new_pc = pc + 1;
   IFo.instruction = memory[pc];
 }
+
 void ID() {
+  IDo = emptyIDEX;
   //the simple forwarding of some registers
   IDo.new_pc = IDi.new_pc;
   IDo.instruction = IDi.instruction;
 
-  //TODO set vala, valb, memRead, memWrite, branch, memToReg, dest, regWrite
+  //Instruction Formats:
+  //  R: opcode (6) | rs (5) | rt (5) | rd (5) | shamt (5) | funct (6)
+  //  I: opcode (6) | rs (5) | rt (5) | IMM (16)
+  //  J: opcode (6) | Pseudo-Address (26)
+  //TODO: double check all of this
+
+  int inst = IDi.instruction;
+
+  int opcode = (inst & 0xFC000000)>>26;
+  if (opcode == 0x00) {
+    //R type instructions
+    IDo.vala = registers[(inst&0x03E00000)>>20];
+    IDo.valb = registers[(inst&0x001F0000)>>15];
+    IDo.dest = registers[(inst&0x0000F800)>>10];
+    IDo.regWrite = true;
+  }
+  else if (opcode == 0x02 || opcode == 0x03) {
+    //J type instructions
+    IDo.valb = inst & 0x03FFFFFF;
+    IDo.branch = true;
+  }
+  else {
+    //I type instructions
+    IDo.vala = registers[(inst&0x03E00000)>>20];
+    IDo.valb = inst&0x0000FFFF;
+    IDo.dest = (inst&0x001F0000)>>15;
+
+    if (opcode == 0x01 || opcode == 0x04 || opcode == 0x05) {
+      //branch instructions
+      IDo.branch = true;
+    }
+    else if (opcode > 0x20) {
+      //load/store instructions
+      if ((opcode > 0x20 && opcode < 0x28) || opcode == 0x30) {
+        //load instructions
+        IDo.memRead = true;
+        IDo.memToReg = true;
+        IDo.regWrite = true;
+      }
+      else {
+        //store instructions
+        IDo.memWrite = true;
+      }
+    }
+    else {
+      //arithmetic instructions
+      IDo.regWrite = true;
+    }
+  }
+  
 }
 
 void branch(int addr) {
@@ -89,6 +141,7 @@ void branch_link(int addr) {
 }
 
 void EX() {
+  EXo = emptyEXMEM;
   //simple forwarding
   EXo.new_pc = EXi.new_pc;
   EXo.valb = EXi.valb;
@@ -102,10 +155,12 @@ void EX() {
   EXo.ALU_result = ALU(EXi.vala, EXi.valb, EXi.instruction);
 
   //branch & jump instructions
-  //0x04, 0x01, 0x07, 0x06, 0x05, 0x02, 0x03, 0x00
   //TODO: Check that jump instructions are proper
+  //TODO: This might actually need to be in the MEM section,
+  //      although I don't think it will matter.
+  //TODO: Double check the addresses, should be PC relative
   int opcode = (EXi.instruction & 0xFC000000)>>26;
-  if (opcode < 0x08) {
+  if (EXi.branch) {
     int vala = EXi.vala;
     int valb = EXi.valb;
     switch (opcode) {
@@ -114,6 +169,7 @@ void EX() {
         if (vala == valb) branch(EXo.ALU_result);
         break;
       case 0x05:
+        //branch not equal
         if (vala != valb) branch(EXo.ALU_result);
         break;
       case 0x01: {
@@ -141,6 +197,7 @@ void EX() {
         break;
       case 0x00: {
         int funct = EXi.instruction & 0x3F;
+        //TODO: fix this to actually link to the correct register
         if (funct == 0x09) branch_link(vala);
         else if (funct == 0x08) branch(vala);
         break;
@@ -150,6 +207,7 @@ void EX() {
 }
 
 void MEM() {
+  MEMo = emptyMEMWB;
   //simple forwarding
   MEMo.ALU_result = MEMi.ALU_result;
   MEMo.dest = MEMi.dest;
