@@ -4,6 +4,8 @@
 
 #define MEMSIZE 1000
 
+#define RA 31
+
 typedef struct IFIDregister {
   int new_pc;
   int instruction;

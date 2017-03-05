@@ -4,6 +4,7 @@ int memory[MEMSIZE] = {0};
 int mem_start = 0;
 int registers[32] = {0};
 int pc = 0;
+bool branch_taken = false;
 
 void init() {
   //zero out EVERYTHING
@@ -57,8 +58,12 @@ void clock() {
   IF();
   ID();
   EX();
-  MEM();
-  WB();
+  if (!branch_taken) {
+    MEM();
+    WB();
+  }
+
+  branch_taken = false;
 };
 
 void IF() {
@@ -72,6 +77,17 @@ void ID() {
 
   //TODO set vala, valb, memRead, memWrite, branch, memToReg, dest, regWrite
 }
+
+void branch(int addr) {
+  branch_taken = true;
+  pc = addr;
+}
+
+void branch_link(int addr) {
+  registers[RA] = pc;
+  branch(addr);
+}
+
 void EX() {
   //simple forwarding
   EXo.new_pc = EXi.new_pc;
@@ -84,7 +100,53 @@ void EX() {
   EXo.instruction = EXi.instruction;
 
   EXo.ALU_result = ALU(EXi.vala, EXi.valb, EXi.instruction);
-  //TODO: add special case of jumps and branches
+
+  //branch & jump instructions
+  //0x04, 0x01, 0x07, 0x06, 0x05, 0x02, 0x03, 0x00
+  //TODO: Check that jump instructions are proper
+  int opcode = (EXi.instruction & 0xFC000000)>>26;
+  if (opcode < 0x08) {
+    int vala = EXi.vala;
+    int valb = EXi.valb;
+    switch (opcode) {
+      case 0x04:
+        //branch on equal
+        if (vala == valb) branch(EXo.ALU_result);
+        break;
+      case 0x05:
+        if (vala != valb) branch(EXo.ALU_result);
+        break;
+      case 0x01: {
+        //branch >= 0 and branch > 0
+        if ((valb == 1 && vala >= 0) || (valb == 0 && vala < 0)) {
+          branch(EXo.ALU_result);
+        }
+        //branch >= 0 and link
+        else if ((valb == 0x11 && vala >= 0) || (valb == 0x10 && vala < 0)) {
+          branch_link(EXo.ALU_result);
+        }
+        break;
+      }
+      case 0x07:
+        if (vala > 0) branch(EXo.ALU_result);
+        break;
+      case 0x06:
+        if (vala <= 0) branch(EXo.ALU_result);
+        break;
+      case 0x02:
+        branch(EXo.ALU_result);
+        break;
+      case 0x03:
+        branch(EXo.ALU_result);
+        break;
+      case 0x00: {
+        int funct = EXi.instruction & 0x3F;
+        if (funct == 0x09) branch_link(vala);
+        else if (funct == 0x08) branch(vala);
+        break;
+      }
+    }
+  }
 }
 
 void MEM() {
