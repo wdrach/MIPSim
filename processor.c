@@ -92,7 +92,7 @@ void ID() {
     IDo.vala = registers[(inst&0x03E00000)>>20];
     IDo.valb = registers[(inst&0x001F0000)>>15];
     IDo.dest = registers[(inst&0x0000F800)>>10];
-    IDo.regWrite = true;
+    IDo.RegWrite = true;
   }
   else if (opcode == 0x02 || opcode == 0x03) {
     //J type instructions
@@ -102,7 +102,8 @@ void ID() {
   else {
     //I type instructions
     IDo.vala = registers[(inst&0x03E00000)>>20];
-    IDo.valb = inst&0x0000FFFF;
+    //sign extend
+    IDo.valb = (int) ((short int) inst&0x0000FFFF);
     IDo.dest = (inst&0x001F0000)>>15;
 
     if (opcode == 0x01 || opcode == 0x04 || opcode == 0x05) {
@@ -115,7 +116,7 @@ void ID() {
         //load instructions
         IDo.memRead = true;
         IDo.memToReg = true;
-        IDo.regWrite = true;
+        IDo.RegWrite = true;
       }
       else {
         //store instructions
@@ -124,7 +125,7 @@ void ID() {
     }
     else {
       //arithmetic instructions
-      IDo.regWrite = true;
+      IDo.RegWrite = true;
     }
   }
   
