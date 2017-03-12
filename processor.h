@@ -1,6 +1,9 @@
 #ifndef PROCESSOR_H_
 #define PROCESSOR_H_
 #include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #define MEMSIZE 1000
 
@@ -76,6 +79,8 @@ MEMWB emptyMEMWB;
 int ALU(int vala, int valb, int instruction);
 
 void init();
+
+void read_file(char* filename);
 
 void clock();
 

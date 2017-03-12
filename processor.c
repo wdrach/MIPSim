@@ -47,6 +47,34 @@ void init() {
   WBi = emptyMEMWB;
 }
 
+void read_file(char* filename) {
+  FILE* fp = fopen(filename, "r");
+  char buf[50];
+  char* temp;
+
+  //set starting address
+  fgets(buf, 50, fp);
+  temp = strtok(buf, ": ");
+  int addr = strtol(temp, NULL, 16);
+  mem_start = addr;
+  temp = strtok(NULL, ": ");
+  int instruction = strtol(temp, NULL, 16);
+  memory[0] = instruction;
+
+  printf("starting at: %08x\n", mem_start);
+  printf("%08x: %08x\n", addr, instruction);
+
+
+  while(fgets(buf, 50, fp) != NULL) {
+    temp = strtok(buf, ": ");
+    addr = strtol(temp, NULL, 16);
+    temp = strtok(NULL, ": ");
+    instruction = strtol(temp, NULL, 16);
+    memory[(addr-mem_start)/4] = instruction;
+    printf("%08x: %08x\n", addr, instruction);
+  }
+}
+
 void clock() {
   //update registers
   IDi = IFo;
@@ -70,6 +98,7 @@ void IF() {
   IFo = emptyIFID;
   IFo.new_pc = pc + 1;
   IFo.instruction = memory[pc];
+  //TODO: carry PC through each stage to actually be able to track instructions
 }
 
 void ID() {
@@ -133,7 +162,7 @@ void ID() {
 
 void branch(int addr) {
   branch_taken = true;
-  pc = addr;
+  pc = (addr-mem_start)/4;
 }
 
 void branch_link(int addr) {
@@ -160,6 +189,7 @@ void EX() {
   //TODO: This might actually need to be in the MEM section,
   //      although I don't think it will matter.
   //TODO: Double check the addresses, should be PC relative
+  //TODO: Double check alignment, are they automatically word aligned?
   int opcode = (EXi.instruction & 0xFC000000)>>26;
   if (EXi.branch) {
     int vala = EXi.vala;
@@ -175,7 +205,7 @@ void EX() {
         break;
       case 0x01: {
         //branch >= 0 and branch > 0
-        if ((valb == 1 && vala >= 0) || (valb == 0 && vala < 0)) {
+        if ((valb == 1 && vala >= 0) || (valb == 0 && vala > 0)) {
           branch(EXo.ALU_result);
         }
         //branch >= 0 and link
@@ -342,7 +372,7 @@ void MEM() {
 
 void WB() {
   //if we need to write, write!
-  if (WBi.RegWrite) registers[WBi.dest] = WBi.memToReg ? WBi.data : WBi.ALU_result;
+  if (WBi.RegWrite && WBi.dest != 0) registers[WBi.dest] = WBi.memToReg ? WBi.data : WBi.ALU_result;
 }
 
 int ALU(int vala, int valb, int instruction) {

@@ -2,5 +2,7 @@
 #include "processor.h"
 
 int main() {
-  printf("Hello World!\n");
+  read_file("./examples/test.txt");
+  init();
+  clock();
 }
