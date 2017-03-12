@@ -1,4 +1,6 @@
 #include "processor.h"
+//TODO: you might be branching too early!
+//TODO: shift left not working
 
 int memory[MEMSIZE] = {0};
 int mem_start = 0;
@@ -134,7 +136,7 @@ void ID() {
     //R type instructions
     IDo.vala = registers[(inst&0x03E00000)>>21];
     IDo.valb = registers[(inst&0x001F0000)>>16];
-    IDo.dest = registers[(inst&0x0000F800)>>11];
+    IDo.dest = (inst&0x0000F800)>>11;
     IDo.RegWrite = true;
   }
   else if (opcode == 0x02 || opcode == 0x03) {
@@ -144,7 +146,7 @@ void ID() {
   }
   else {
     //I type instructions
-    IDo.vala = registers[(inst&0x03E00000)>>20];
+    IDo.vala = registers[(inst&0x03E00000)>>21];
     //sign extend
     IDo.valb = (int) ((short int) inst&0x0000FFFF);
     IDo.dest = (inst&0x001F0000)>>16;
@@ -218,8 +220,10 @@ void EX() {
   //shamt!
   if (opcode == 0x00) {
     int funct = instruction & 0x3F;
-    if (funct == 0x00 || funct == 0x02 || funct == 0x03)
-      valb = instruction & 0x7C0>>6;
+    if (funct == 0x00 || funct == 0x02 || funct == 0x03) {
+      vala = valb;
+      valb = (instruction & 0x7C0)>>6;
+    }
   }
 
   EXo.valb = valb;
@@ -615,5 +619,8 @@ void print_registers() {
 
   int i;
   printf("\nREGISTERS:\n");
-  for (i=0; i<32; i++) printf("%02d: %08x\n", i, registers[i]);
+  for (i=0; i<32; i++) {
+    if (registers[i] != 0)
+      printf("%02d: %08x\n", i, registers[i]);
+  }
 }
