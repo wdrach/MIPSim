@@ -10,6 +10,7 @@
 #define RA 31
 
 typedef struct IFIDregister {
+  int pc;
   int new_pc;
   int instruction;
 } IFID;
@@ -22,6 +23,7 @@ IFID IDi;
 IFID emptyIFID;
 
 typedef struct IDEXregister {
+  int pc;
   int new_pc;
   int instruction;
   int vala;
@@ -45,6 +47,7 @@ IDEX EXi;
 IDEX emptyIDEX;
 
 typedef struct EXMEMregister {
+  int pc;
   int new_pc;
   int ALU_result;
   int valb;
@@ -63,6 +66,7 @@ EXMEM MEMi;
 EXMEM emptyEXMEM;
 
 typedef struct MEMWBregister {
+  int pc;
   int data;
   int ALU_result;
   int dest;
@@ -76,13 +80,17 @@ MEMWB MEMo;
 MEMWB WBi;
 MEMWB emptyMEMWB;
 
-int ALU(int vala, int valb, int instruction);
+long ALU(int vala, int valb, int valc, int instruction);
 
 void init();
 
 void read_file(char* filename);
 
-void clock();
+void print_registers();
+
+bool clock();
+
+bool step();
 
 void IF();
 void ID();

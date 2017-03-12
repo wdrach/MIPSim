@@ -4,5 +4,5 @@
 int main() {
   read_file("./examples/test.txt");
   init();
-  clock();
+  while(step());
 }

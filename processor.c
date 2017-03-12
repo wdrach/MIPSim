@@ -9,12 +9,12 @@ bool branch_taken = false;
 void init() {
   //zero out EVERYTHING
 
-  emptyIFID.new_pc = 0;
+  emptyIFID.pc = 0;
   emptyIFID.instruction = 0;
   IFo = emptyIFID;
   IDi = emptyIFID;
 
-  emptyIDEX.new_pc = 0;
+  emptyIDEX.pc = 0;
   emptyIDEX.instruction = 0;
   emptyIDEX.vala = 0;
   emptyIDEX.valb = 0;
@@ -29,7 +29,7 @@ void init() {
   IDo = emptyIDEX;
   EXi = emptyIDEX;
 
-  emptyEXMEM.new_pc = 0;
+  emptyEXMEM.pc = 0;
   emptyEXMEM.ALU_result = 0;
   emptyEXMEM.valb = 0;
   emptyEXMEM.dest = 0;
@@ -39,6 +39,7 @@ void init() {
   EXo = emptyEXMEM;
   MEMi = emptyEXMEM;
 
+  emptyMEMWB.pc = 0;
   emptyMEMWB.data = 0;
   emptyMEMWB.dest = 0;
   emptyMEMWB.RegWrite = false;
@@ -75,7 +76,7 @@ void read_file(char* filename) {
   }
 }
 
-void clock() {
+bool clock() {
   //update registers
   IDi = IFo;
   EXi = IDo;
@@ -92,35 +93,48 @@ void clock() {
   }
 
   branch_taken = false;
-};
+
+  if (pc < 0) return false;
+  return true;
+}
+
+bool step() {
+  printf("\n\nStepping through code, clock running.\n");
+  bool ret = clock();
+  printf("\nPrinting Registers:");
+  print_registers();
+  printf("Press any key to step.\n");
+  getchar();
+  return ret;
+}
 
 void IF() {
   IFo = emptyIFID;
-  IFo.new_pc = pc + 1;
+  IFo.pc = pc;
   IFo.instruction = memory[pc];
-  //TODO: carry PC through each stage to actually be able to track instructions
+  //increment PC
+  pc++;
 }
 
 void ID() {
   IDo = emptyIDEX;
   //the simple forwarding of some registers
-  IDo.new_pc = IDi.new_pc;
+  IDo.pc = IDi.pc;
   IDo.instruction = IDi.instruction;
 
   //Instruction Formats:
   //  R: opcode (6) | rs (5) | rt (5) | rd (5) | shamt (5) | funct (6)
   //  I: opcode (6) | rs (5) | rt (5) | IMM (16)
   //  J: opcode (6) | Pseudo-Address (26)
-  //TODO: double check all of this
 
   int inst = IDi.instruction;
 
   int opcode = (inst & 0xFC000000)>>26;
   if (opcode == 0x00) {
     //R type instructions
-    IDo.vala = registers[(inst&0x03E00000)>>20];
-    IDo.valb = registers[(inst&0x001F0000)>>15];
-    IDo.dest = registers[(inst&0x0000F800)>>10];
+    IDo.vala = registers[(inst&0x03E00000)>>21];
+    IDo.valb = registers[(inst&0x001F0000)>>16];
+    IDo.dest = registers[(inst&0x0000F800)>>11];
     IDo.RegWrite = true;
   }
   else if (opcode == 0x02 || opcode == 0x03) {
@@ -133,7 +147,7 @@ void ID() {
     IDo.vala = registers[(inst&0x03E00000)>>20];
     //sign extend
     IDo.valb = (int) ((short int) inst&0x0000FFFF);
-    IDo.dest = (inst&0x001F0000)>>15;
+    IDo.dest = (inst&0x001F0000)>>16;
 
     if (opcode == 0x01 || opcode == 0x04 || opcode == 0x05) {
       //branch instructions
@@ -163,37 +177,58 @@ void ID() {
 void branch(int addr) {
   branch_taken = true;
   pc = (addr-mem_start)/4;
+  //clear everything
+  IFo = emptyIFID;
+  IDi = emptyIFID;
+  IDo = emptyIDEX;
+  EXi = emptyIDEX;
+  EXo = emptyEXMEM;
+  MEMi = emptyEXMEM;
+  MEMo = emptyMEMWB;
+  WBi = emptyMEMWB;
 }
 
 void branch_link(int addr) {
-  registers[RA] = pc;
+  registers[RA] = mem_start + pc*4;
   branch(addr);
 }
 
 void EX() {
   EXo = emptyEXMEM;
   //simple forwarding
-  EXo.new_pc = EXi.new_pc;
-  EXo.valb = EXi.valb;
   EXo.dest = EXi.dest;
   EXo.RegWrite = EXi.RegWrite;
   EXo.memRead = EXi.memRead;
   EXo.memWrite = EXi.memWrite;
   EXo.memToReg = EXi.memToReg;
   EXo.instruction = EXi.instruction;
+  EXo.pc = EXi.pc;
 
-  EXo.ALU_result = ALU(EXi.vala, EXi.valb, EXi.instruction);
+  int vala = EXi.vala;
+  int valb = EXi.valb;
+  int valc = 0;
+  int instruction = EXi.instruction;
+  int opcode = (instruction & 0xFC000000)>>26;
+
+  if (opcode == 0x04 || opcode == 0x05) {
+    vala = registers[EXi.dest];
+    valb = EXi.vala;
+    valc = EXi.valb;
+  }
+  //shamt!
+  if (opcode == 0x00) {
+    int funct = instruction & 0x3F;
+    if (funct == 0x00 || funct == 0x02 || funct == 0x03)
+      valb = instruction & 0x7C0>>6;
+  }
+
+  EXo.valb = valb;
+
+  EXo.ALU_result = ALU(vala, valb, valc, EXi.instruction);
+  //TODO: implement high/low register instructions
 
   //branch & jump instructions
-  //TODO: Check that jump instructions are proper
-  //TODO: This might actually need to be in the MEM section,
-  //      although I don't think it will matter.
-  //TODO: Double check the addresses, should be PC relative
-  //TODO: Double check alignment, are they automatically word aligned?
-  int opcode = (EXi.instruction & 0xFC000000)>>26;
   if (EXi.branch) {
-    int vala = EXi.vala;
-    int valb = EXi.valb;
     switch (opcode) {
       case 0x04:
         //branch on equal
@@ -244,9 +279,8 @@ void MEM() {
   MEMo.dest = MEMi.dest;
   MEMo.RegWrite = MEMi.RegWrite;
   MEMo.memToReg = MEMi.memToReg;
+  MEMo.pc = MEMi.pc;
 
-  //TODO: byte align? Do we have to divide this by 4?
-  //if we need to read from memory, do so.
   int opcode = (MEMi.instruction & 0xFC000000)>>26;
 
   //load instructions
@@ -375,6 +409,211 @@ void WB() {
   if (WBi.RegWrite && WBi.dest != 0) registers[WBi.dest] = WBi.memToReg ? WBi.data : WBi.ALU_result;
 }
 
-int ALU(int vala, int valb, int instruction) {
-  return 0;
+long ALU(int input1, int input2, int input3, int instrut) {
+  long result = 0;
+  long tmp = 0;
+  int optmp = instrut & 0xFC000000;
+  int funct = instrut & 0x0000003F;
+  int opcode = (optmp >> 26) & 0x3F;
+  switch(opcode) {
+    case 0x01:
+      result = input2 << 2;
+      return(result);
+    case 0x02:
+      tmp = pc & 0xF0000000;
+      result = tmp | input2;
+      return(result);
+    case 0x03:
+      tmp = pc & 0xF0000000;
+      result = tmp | input2;
+      return(result);
+    case 0x04:
+      result = input3 << 2;
+      result += pc;
+      return(result);
+    case 0x05:
+      result = input2 << 2;
+      return(result);
+    case 0x06:
+      result = input2 << 2;
+      return(result);
+    case 0x07:
+      result = input2 << 2;
+      return(result);
+    case 0x08:
+      result = input1 + input2;
+      return(result);
+    case 0x09:
+      result = input1 + input2;
+      return(result);
+    case 0x0A:
+      if (input1 < input2)
+        result = 1;
+      else
+        result = 0;
+      return(result);
+    case 0x0B:
+      if (input1 < input2)
+        result = 1;
+      else
+        result = 0;
+      return(result);
+    case 0x0C:
+      result = input1 & input2;
+      return(result);
+    case 0x0D:
+      result = input1 | input2;
+      return(result);
+    case 0x0E:
+      result = input1 ^ input2;
+      return(result);
+    case 0x0F:
+      result = input2 << 16;
+      return(result);
+    case 0x18:
+      result = input1 + input2;
+      return(result);
+    case 0x20:
+      result = input1 + input2;
+      return(result);
+    case 0x21:
+      result = input1 + input2;
+      return(result);
+    case 0x22:
+      result = input1 + input2;
+      return(result);
+    case 0x23:
+      result = input1 + input2;
+      return(result);
+    case 0x24:
+      result = input1 + input2;
+      return(result);
+    case 0x25:
+      result = input1 + input2;
+      return(result);
+    case 0x28:
+      result = input1 + input2;
+      return(result);
+    case 0x29:
+      result = input1 + input2;
+      return(result);
+    case 0x2B:
+      result = input1 + input2;
+      return(result);
+  }
+  switch(funct) {
+    case 0x00:
+      result = input1 << input2;
+      return(result);
+    case 0x02:
+      result = input1 >> input2;
+      return(result);
+    case 0x03:
+      result = input1 >> input2;
+      return(result);
+    case 0x04:
+      result = input1 << input2;
+      return(result);
+    case 0x06:
+      result = input1 >> input2;
+      return(result);
+    case 0x07:
+      result = input1 >> input2;
+      return(result);
+    case 0x08:
+      return(input2);
+    case 0x10:
+      return(input1);
+    case 0x12:
+      return(input1);
+    case 0x18:
+      result = input1 * input2;
+      return(result);
+    case 0x19:
+      result = input1 * input2;
+      return(result);
+    case 0x1A:
+      result = input1 / input2;
+      return(result);
+    case 0x1B:
+      result = input1 / input2;
+      return(result);
+    case 0x20:
+      result = input1 + input2;
+      return(result);
+    case 0x21:
+      result = input1 + input2;
+      return(result);
+    case 0x22:
+      result = input1 - input2;
+      return(result);
+    case 0x23:
+      result = input1 - input2;
+      return(result);
+    case 0x24:
+      result = input1 & input2;
+      return(result);
+    case 0x25:
+      result = input1 | input2;
+      return(result);
+    case 0x26:
+      result = input1 ^ input2;
+      return(result);
+    case 0x27:
+      tmp = input1 | input2;
+      result = ~tmp;
+      return(result);
+    case 0x2A:
+      if (input1 < input2)
+        result = 1;
+      else
+        result = 0;
+      return(result);
+    case 0x2B:
+      if (input1 < input2)
+        result = 1;
+      else
+        result = 0;
+      return(result);
+  }
+  printf("instruction opcode: %d function : %d not found/n", opcode, funct);
+  return(0);
+}
+
+void print_registers() {
+  //this function is meant to be run AFTER clock
+  printf("\nIDEX:\n");
+  printf("pc: %d\n", IDo.pc);
+  printf("instruction: %08x\n", IDo.instruction);
+  printf("vala: %d\n", IDo.vala);
+  printf("valb: %d\n", IDo.valb);
+  printf("dest: %d\n", IDo.dest);
+  printf("memRead: %s\n", IDo.memRead ? "true" : "false");
+  printf("memWrite: %s\n", IDo.memWrite ? "true" : "false");
+  printf("RegWrite: %s\n", IDo.RegWrite ? "true" : "false");
+  printf("branch: %s\n", IDo.branch ? "true" : "false");
+  printf("memToReg: %s\n", IDo.memToReg ? "true" : "false");
+
+  printf("\nEXMEM:\n");
+  printf("pc: %d\n", EXo.pc);
+  printf("instruction: %08x\n", EXo.instruction);
+  printf("ALU_result: %d\n", EXo.ALU_result);
+  printf("valb: %d\n", EXo.valb);
+  printf("dest: %d\n", EXo.dest);
+  printf("memRead: %s\n", EXo.memRead ? "true" : "false");
+  printf("memWrite: %s\n", EXo.memWrite ? "true" : "false");
+  printf("RegWrite: %s\n", EXo.RegWrite ? "true" : "false");
+  printf("memToReg: %s\n", EXo.memToReg ? "true" : "false");
+
+  printf("\nMEMWB:\n");
+  printf("pc: %d\n", MEMo.pc);
+  printf("ALU_result: %d\n", MEMo.ALU_result);
+  printf("data: %d\n", MEMo.data);
+  printf("dest: %d\n", MEMo.dest);
+  printf("RegWrite: %s\n", MEMo.RegWrite ? "true" : "false");
+  printf("memToReg: %s\n", MEMo.memToReg ? "true" : "false");
+
+  int i;
+  printf("\nREGISTERS:\n");
+  for (i=0; i<32; i++) printf("%02d: %08x\n", i, registers[i]);
 }
