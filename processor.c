@@ -1,6 +1,8 @@
 #include "processor.h"
 //TODO: unsigned instructions check
 //TODO: branches/jumps don't seem to be following through properly
+//TODO: multiply add?
+//TODO: Comparison operators? (set less than)
 
 int memory[MEMSIZE] = {0};
 int mem_start = 0;
@@ -505,7 +507,7 @@ long ALU(int input1, int input2, int input3, int instrut) {
         result = input1 << input2;
         return(result);
       case 0x02:
-        result = input1 >> input2;
+        result = (int) ((unsigned int) input1) >> input2;
         return(result);
       case 0x03:
         result = input1 >> input2;
@@ -529,7 +531,7 @@ long ALU(int input1, int input2, int input3, int instrut) {
         result = input1 * input2;
         return(result);
       case 0x19:
-        result = input1 * input2;
+        result = (unsigned int) input1 * (unsigned int) input2;
         return(result);
       case 0x1A:
         result = input1 / input2;
