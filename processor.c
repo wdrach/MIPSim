@@ -1,12 +1,10 @@
 #include "processor.h"
 //TODO: you might be branching too early!
-//TODO: shift left not working
 
 int memory[MEMSIZE] = {0};
 int mem_start = 0;
 int registers[32] = {0};
 int pc = 0;
-bool branch_taken = false;
 
 void init() {
   //zero out EVERYTHING
@@ -89,12 +87,8 @@ bool clock() {
   IF();
   ID();
   EX();
-  if (!branch_taken) {
-    MEM();
-    WB();
-  }
-
-  branch_taken = false;
+  MEM();
+  WB();
 
   if (pc < 0) return false;
   return true;
@@ -177,7 +171,6 @@ void ID() {
 }
 
 void branch(int addr) {
-  branch_taken = true;
   pc = (addr-mem_start)/4;
   //clear everything
   IFo = emptyIFID;
@@ -185,9 +178,6 @@ void branch(int addr) {
   IDo = emptyIDEX;
   EXi = emptyIDEX;
   EXo = emptyEXMEM;
-  MEMi = emptyEXMEM;
-  MEMo = emptyMEMWB;
-  WBi = emptyMEMWB;
 }
 
 void branch_link(int addr) {
@@ -419,21 +409,22 @@ long ALU(int input1, int input2, int input3, int instrut) {
   int optmp = instrut & 0xFC000000;
   int funct = instrut & 0x0000003F;
   int opcode = (optmp >> 26) & 0x3F;
+  int addr = pc*4 + mem_start;
   switch(opcode) {
     case 0x01:
       result = input2 << 2;
       return(result);
     case 0x02:
-      tmp = pc & 0xF0000000;
+      tmp = addr & 0xF0000000;
       result = tmp | input2;
       return(result);
     case 0x03:
-      tmp = pc & 0xF0000000;
+      tmp = addr & 0xF0000000;
       result = tmp | input2;
       return(result);
     case 0x04:
       result = input3 << 2;
-      result += pc;
+      result += addr;
       return(result);
     case 0x05:
       result = input2 << 2;
