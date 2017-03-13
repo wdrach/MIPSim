@@ -84,10 +84,15 @@ bool clock() {
   WBi = MEMo;
 
   //run through the cycles
+  printf("A\n");
   IF();
+  printf("B\n");
   ID();
+  printf("C\n");
   EX();
+  printf("D\n");
   MEM();
+  printf("E\n");
   WB();
 
   if (pc < 0) return false;
@@ -344,7 +349,9 @@ void MEM() {
 
   //similar to all of the read stuff, just with write
   if (MEMi.memWrite) {
+    printf("G\n");
     int addr = (MEMi.ALU_result - mem_start)/4;
+    printf("ADDR: %d\n", MEMi.ALU_result);
     switch (opcode) {
       case 0x28:
         //store byte
@@ -496,80 +503,82 @@ long ALU(int input1, int input2, int input3, int instrut) {
       result = input1 + input2;
       return(result);
   }
-  switch(funct) {
-    case 0x00:
-      result = input1 << input2;
-      return(result);
-    case 0x02:
-      result = input1 >> input2;
-      return(result);
-    case 0x03:
-      result = input1 >> input2;
-      return(result);
-    case 0x04:
-      result = input1 << input2;
-      return(result);
-    case 0x06:
-      result = input1 >> input2;
-      return(result);
-    case 0x07:
-      result = input1 >> input2;
-      return(result);
-    case 0x08:
-      return(input2);
-    case 0x10:
-      return(input1);
-    case 0x12:
-      return(input1);
-    case 0x18:
-      result = input1 * input2;
-      return(result);
-    case 0x19:
-      result = input1 * input2;
-      return(result);
-    case 0x1A:
-      result = input1 / input2;
-      return(result);
-    case 0x1B:
-      result = input1 / input2;
-      return(result);
-    case 0x20:
-      result = input1 + input2;
-      return(result);
-    case 0x21:
-      result = input1 + input2;
-      return(result);
-    case 0x22:
-      result = input1 - input2;
-      return(result);
-    case 0x23:
-      result = input1 - input2;
-      return(result);
-    case 0x24:
-      result = input1 & input2;
-      return(result);
-    case 0x25:
-      result = input1 | input2;
-      return(result);
-    case 0x26:
-      result = input1 ^ input2;
-      return(result);
-    case 0x27:
-      tmp = input1 | input2;
-      result = ~tmp;
-      return(result);
-    case 0x2A:
-      if (input1 < input2)
-        result = 1;
-      else
-        result = 0;
-      return(result);
-    case 0x2B:
-      if (input1 < input2)
-        result = 1;
-      else
-        result = 0;
-      return(result);
+  if (opcode == 0x00) {
+    switch(funct) {
+      case 0x00:
+        result = input1 << input2;
+        return(result);
+      case 0x02:
+        result = input1 >> input2;
+        return(result);
+      case 0x03:
+        result = input1 >> input2;
+        return(result);
+      case 0x04:
+        result = input1 << input2;
+        return(result);
+      case 0x06:
+        result = input1 >> input2;
+        return(result);
+      case 0x07:
+        result = input1 >> input2;
+        return(result);
+      case 0x08:
+        return(input2);
+      case 0x10:
+        return(input1);
+      case 0x12:
+        return(input1);
+      case 0x18:
+        result = input1 * input2;
+        return(result);
+      case 0x19:
+        result = input1 * input2;
+        return(result);
+      case 0x1A:
+        result = input1 / input2;
+        return(result);
+      case 0x1B:
+        result = input1 / input2;
+        return(result);
+      case 0x20:
+        result = input1 + input2;
+        return(result);
+      case 0x21:
+        result = input1 + input2;
+        return(result);
+      case 0x22:
+        result = input1 - input2;
+        return(result);
+      case 0x23:
+        result = input1 - input2;
+        return(result);
+      case 0x24:
+        result = input1 & input2;
+        return(result);
+      case 0x25:
+        result = input1 | input2;
+        return(result);
+      case 0x26:
+        result = input1 ^ input2;
+        return(result);
+      case 0x27:
+        tmp = input1 | input2;
+        result = ~tmp;
+        return(result);
+      case 0x2A:
+        if (input1 < input2)
+          result = 1;
+        else
+          result = 0;
+        return(result);
+      case 0x2B:
+        if (input1 < input2)
+          result = 1;
+        else
+          result = 0;
+        return(result);
+    }
   }
   printf("instruction opcode: %d function : %d not found/n", opcode, funct);
   return(0);
