@@ -1,8 +1,7 @@
 #include "processor.h"
 //TODO: unsigned instructions check
-//TODO: branches/jumps don't seem to be following through properly
-//TODO: multiply add?
-//TODO: Comparison operators? (set less than)
+//TODO: branches don't seem to be following through properly
+//TODO: opcodes 0x18-0x2B not implemented in ALU
 
 int memory[MEMSIZE] = {0};
 int mem_start = 0;
@@ -145,8 +144,9 @@ void ID() {
     //I type instructions
     IDo.vala = registers[(inst&0x03E00000)>>21];
     //sign extend
-    IDo.valb = (int) ((short int) inst&0x0000FFFF);
+    IDo.valb = (int) ((short int) (inst&0x0000FFFF));
     IDo.dest = (inst&0x001F0000)>>16;
+    printf("I type instruction, immediate: %d\n", IDo.valb);
 
     if (opcode == 0x01 || opcode == 0x04 || opcode == 0x05) {
       //branch instructions
@@ -175,6 +175,7 @@ void ID() {
 
 void branch(int addr) {
   pc = (addr-mem_start)/4;
+  printf("Branching to address: %08x\nPC: %d\n", addr, pc);
   //clear everything
   IFo = emptyIFID;
   IDi = emptyIFID;
@@ -253,7 +254,6 @@ void EX() {
         if (vala <= 0) branch(EXo.ALU_result);
         break;
       case 0x02: {
-        printf("JUMPING TO: %08x\n", EXo.ALU_result);
         branch(EXo.ALU_result);
         break;
       }
@@ -418,6 +418,7 @@ long ALU(int input1, int input2, int input3, int instrut) {
   switch(opcode) {
     case 0x01:
       result = input2 << 2;
+      result += addr;
       return(result);
     case 0x02:
       tmp = addr & 0xF0000000;
@@ -432,13 +433,16 @@ long ALU(int input1, int input2, int input3, int instrut) {
       result += addr;
       return(result);
     case 0x05:
-      result = input2 << 2;
+      result = input3 << 2;
+      result += addr;
       return(result);
     case 0x06:
       result = input2 << 2;
+      result += addr;
       return(result);
     case 0x07:
       result = input2 << 2;
+      result += addr;
       return(result);
     case 0x08:
       result = input1 + input2;
@@ -447,16 +451,10 @@ long ALU(int input1, int input2, int input3, int instrut) {
       result = input1 + input2;
       return(result);
     case 0x0A:
-      if (input1 < input2)
-        result = 1;
-      else
-        result = 0;
+      result = input1 < input2;
       return(result);
     case 0x0B:
-      if (input1 < input2)
-        result = 1;
-      else
-        result = 0;
+      result = input1 < input2;
       return(result);
     case 0x0C:
       result = input1 & input2;
@@ -565,16 +563,10 @@ long ALU(int input1, int input2, int input3, int instrut) {
         result = ~tmp;
         return(result);
       case 0x2A:
-        if (input1 < input2)
-          result = 1;
-        else
-          result = 0;
+        result = input1 < input2;
         return(result);
       case 0x2B:
-        if (input1 < input2)
-          result = 1;
-        else
-          result = 0;
+        result = (unsigned int) input1 < (unsigned int) input2;
         return(result);
     }
   }
