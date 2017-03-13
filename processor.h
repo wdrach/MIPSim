@@ -8,6 +8,7 @@
 #define MEMSIZE 1000
 
 #define RA 31
+#define SP 29
 
 typedef struct IFIDregister {
   int pc;

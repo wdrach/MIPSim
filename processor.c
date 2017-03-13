@@ -1,5 +1,5 @@
 #include "processor.h"
-//TODO: you might be branching too early!
+//TODO: FIX Load/store (not correct stack pointer/operands)
 
 int memory[MEMSIZE] = {0};
 int mem_start = 0;
@@ -62,9 +62,6 @@ void read_file(char* filename) {
   int instruction = strtol(temp, NULL, 16);
   memory[0] = instruction;
 
-  printf("starting at: %08x\n", mem_start);
-  printf("%08x: %08x\n", addr, instruction);
-
 
   while(fgets(buf, 50, fp) != NULL) {
     temp = strtok(buf, ": ");
@@ -72,8 +69,11 @@ void read_file(char* filename) {
     temp = strtok(NULL, ": ");
     instruction = strtol(temp, NULL, 16);
     memory[(addr-mem_start)/4] = instruction;
-    printf("%08x: %08x\n", addr, instruction);
   }
+
+  //set SP to end of memory
+  //TODO: fix this to do a proper stack
+  registers[SP] = addr + 4;
 }
 
 bool clock() {
@@ -84,15 +84,10 @@ bool clock() {
   WBi = MEMo;
 
   //run through the cycles
-  printf("A\n");
   IF();
-  printf("B\n");
   ID();
-  printf("C\n");
   EX();
-  printf("D\n");
   MEM();
-  printf("E\n");
   WB();
 
   if (pc < 0) return false;
@@ -349,9 +344,7 @@ void MEM() {
 
   //similar to all of the read stuff, just with write
   if (MEMi.memWrite) {
-    printf("G\n");
     int addr = (MEMi.ALU_result - mem_start)/4;
-    printf("ADDR: %d\n", MEMi.ALU_result);
     switch (opcode) {
       case 0x28:
         //store byte
