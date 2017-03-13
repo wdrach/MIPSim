@@ -1,5 +1,6 @@
 #include "processor.h"
-//TODO: FIX Load/store (not correct stack pointer/operands)
+//TODO: unsigned instructions check
+//TODO: branches/jumps don't seem to be following through properly
 
 int memory[MEMSIZE] = {0};
 int mem_start = 0;
@@ -249,9 +250,11 @@ void EX() {
       case 0x06:
         if (vala <= 0) branch(EXo.ALU_result);
         break;
-      case 0x02:
+      case 0x02: {
+        printf("JUMPING TO: %08x\n", EXo.ALU_result);
         branch(EXo.ALU_result);
         break;
+      }
       case 0x03:
         branch(EXo.ALU_result);
         break;
@@ -416,11 +419,11 @@ long ALU(int input1, int input2, int input3, int instrut) {
       return(result);
     case 0x02:
       tmp = addr & 0xF0000000;
-      result = tmp | input2;
+      result = tmp | input2<<2;
       return(result);
     case 0x03:
       tmp = addr & 0xF0000000;
-      result = tmp | input2;
+      result = tmp | input2<<2;
       return(result);
     case 0x04:
       result = input3 << 2;
