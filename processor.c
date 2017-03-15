@@ -1,6 +1,4 @@
 #include "processor.h"
-//TODO: unsigned instructions check
-//TODO: branches don't seem to be following through properly
 //TODO: opcodes 0x18-0x2B not implemented in ALU
 
 int memory[MEMSIZE] = {0};
@@ -8,8 +6,22 @@ int mem_start = 0;
 int registers[32] = {0};
 int pc = 0;
 
+//bools for stalling
+bool stall_IF = false;
+bool stall_ID = false;
+bool stall_EX = false;
+bool stall_MEM = false;
+bool stall_WB = false;
+
 void init() {
   //zero out EVERYTHING
+  empty_inst.opcode = 0;
+  empty_inst.rs = 0;
+  empty_inst.rt = 0;
+  empty_inst.rd = 0;
+  empty_inst.shamt = 0;
+  empty_inst.funct = 0;
+  empty_inst.immediate = 0;
 
   emptyIFID.pc = 0;
   emptyIFID.instruction = 0;
@@ -17,7 +29,7 @@ void init() {
   IDi = emptyIFID;
 
   emptyIDEX.pc = 0;
-  emptyIDEX.instruction = 0;
+  emptyIDEX.instruction = empty_inst;
   emptyIDEX.vala = 0;
   emptyIDEX.valb = 0;
   emptyIDEX.memRead = false;
@@ -32,6 +44,7 @@ void init() {
   EXi = emptyIDEX;
 
   emptyEXMEM.pc = 0;
+  emptyEXMEM.instruction = empty_inst;
   emptyEXMEM.ALU_result = 0;
   emptyEXMEM.valb = 0;
   emptyEXMEM.dest = 0;
@@ -107,6 +120,8 @@ bool step() {
 }
 
 void IF() {
+  if (stall_IF) return;
+
   IFo = emptyIFID;
   IFo.pc = pc;
   IFo.instruction = memory[pc];
@@ -115,37 +130,48 @@ void IF() {
 }
 
 void ID() {
+  if (stall_ID) return;
+
   IDo = emptyIDEX;
   //the simple forwarding of some registers
   IDo.pc = IDi.pc;
-  IDo.instruction = IDi.instruction;
 
   //Instruction Formats:
   //  R: opcode (6) | rs (5) | rt (5) | rd (5) | shamt (5) | funct (6)
   //  I: opcode (6) | rs (5) | rt (5) | IMM (16)
   //  J: opcode (6) | Pseudo-Address (26)
 
-  int inst = IDi.instruction;
+  int instruction = IDi.instruction;
 
-  int opcode = (inst & 0xFC000000)>>26;
+  int opcode = (instruction & 0xFC000000)>>26;
+  IDo.instruction.opcode = opcode;
   if (opcode == 0x00) {
     //R type instructions
-    IDo.vala = registers[(inst&0x03E00000)>>21];
-    IDo.valb = registers[(inst&0x001F0000)>>16];
-    IDo.dest = (inst&0x0000F800)>>11;
+    //deconstruct
+    IDo.instruction.funct = instruction&0x3F;
+    IDo.instruction.rs = (instruction&0x03E00000)>>21;
+    IDo.instruction.rt = (instruction&0x001F0000)>>16;
+    IDo.instruction.shamt = (instruction & 0x7C0)>>6;
+    IDo.vala = registers[IDo.instruction.rs];
+    IDo.valb = registers[IDo.instruction.rt];
+    IDo.dest = (instruction&0x0000F800)>>11;
+    IDo.instruction.rd = IDo.dest;
     IDo.RegWrite = true;
   }
   else if (opcode == 0x02 || opcode == 0x03) {
     //J type instructions
-    IDo.valb = inst & 0x03FFFFFF;
+    IDo.instruction.immediate = instruction & 0x3FFFFFF;
+    IDo.valb = IDo.instruction.immediate;
     IDo.branch = true;
   }
   else {
     //I type instructions
-    IDo.vala = registers[(inst&0x03E00000)>>21];
+    IDo.instruction.rs = (instruction&0x03E00000)>>21;
+    IDo.vala = registers[IDo.instruction.rs];
     //sign extend
-    IDo.valb = (int) ((short int) (inst&0x0000FFFF));
-    IDo.dest = (inst&0x001F0000)>>16;
+    IDo.valb = (int) ((short int) (instruction&0x0000FFFF));
+    IDo.instruction.immediate = IDo.valb;
+    IDo.dest = (instruction&0x001F0000)>>16;
     printf("I type instruction, immediate: %d\n", IDo.valb);
 
     if (opcode == 0x01 || opcode == 0x04 || opcode == 0x05) {
@@ -190,6 +216,8 @@ void branch_link(int addr) {
 }
 
 void EX() {
+  if (stall_EX) return;
+
   EXo = emptyEXMEM;
   //simple forwarding
   EXo.dest = EXi.dest;
@@ -203,8 +231,8 @@ void EX() {
   int vala = EXi.vala;
   int valb = EXi.valb;
   int valc = 0;
-  int instruction = EXi.instruction;
-  int opcode = (instruction & 0xFC000000)>>26;
+  inst instruction = EXi.instruction;
+  int opcode = instruction.opcode;
 
   if (opcode == 0x04 || opcode == 0x05) {
     vala = registers[EXi.dest];
@@ -213,16 +241,16 @@ void EX() {
   }
   //shamt!
   if (opcode == 0x00) {
-    int funct = instruction & 0x3F;
+    int funct = instruction.funct;
     if (funct == 0x00 || funct == 0x02 || funct == 0x03) {
       vala = valb;
-      valb = (instruction & 0x7C0)>>6;
+      valb = instruction.shamt;
     }
   }
 
   EXo.valb = valb;
 
-  EXo.ALU_result = ALU(vala, valb, valc, EXi.instruction);
+  EXo.ALU_result = ALU(vala, valb, valc, instruction);
   //TODO: implement high/low register instructions
 
   //branch & jump instructions
@@ -261,7 +289,7 @@ void EX() {
         branch(EXo.ALU_result);
         break;
       case 0x00: {
-        int funct = EXi.instruction & 0x3F;
+        int funct = instruction.funct;
         //TODO: fix this to actually link to the correct register
         if (funct == 0x09) branch_link(vala);
         else if (funct == 0x08) branch(vala);
@@ -272,6 +300,8 @@ void EX() {
 }
 
 void MEM() {
+  if (stall_MEM) return;
+
   MEMo = emptyMEMWB;
   //simple forwarding
   MEMo.ALU_result = MEMi.ALU_result;
@@ -280,7 +310,7 @@ void MEM() {
   MEMo.memToReg = MEMi.memToReg;
   MEMo.pc = MEMi.pc;
 
-  int opcode = (MEMi.instruction & 0xFC000000)>>26;
+  int opcode = MEMi.instruction.opcode;
 
   //load instructions
   if (MEMi.memRead) {
@@ -404,16 +434,16 @@ void MEM() {
 }
 
 void WB() {
+  if (stall_WB) return;
   //if we need to write, write!
   if (WBi.RegWrite && WBi.dest != 0) registers[WBi.dest] = WBi.memToReg ? WBi.data : WBi.ALU_result;
 }
 
-long ALU(int input1, int input2, int input3, int instrut) {
+long ALU(int input1, int input2, int input3, inst instruction) {
   long result = 0;
   long tmp = 0;
-  int optmp = instrut & 0xFC000000;
-  int funct = instrut & 0x0000003F;
-  int opcode = (optmp >> 26) & 0x3F;
+  int funct = instruction.funct;
+  int opcode = instruction.opcode;
   int addr = pc*4 + mem_start;
   switch(opcode) {
     case 0x01:
@@ -578,7 +608,6 @@ void print_registers() {
   //this function is meant to be run AFTER clock
   printf("\nIDEX:\n");
   printf("pc: %d\n", IDo.pc);
-  printf("instruction: %08x\n", IDo.instruction);
   printf("vala: %d\n", IDo.vala);
   printf("valb: %d\n", IDo.valb);
   printf("dest: %d\n", IDo.dest);
@@ -590,7 +619,6 @@ void print_registers() {
 
   printf("\nEXMEM:\n");
   printf("pc: %d\n", EXo.pc);
-  printf("instruction: %08x\n", EXo.instruction);
   printf("ALU_result: %d\n", EXo.ALU_result);
   printf("valb: %d\n", EXo.valb);
   printf("dest: %d\n", EXo.dest);

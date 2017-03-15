@@ -10,6 +10,18 @@
 #define RA 31
 #define SP 29
 
+typedef struct deconstructed_instruction {
+  int opcode;
+  int rs;
+  int rt;
+  int rd;
+  int shamt;
+  int funct;
+  int immediate;
+} inst;
+
+inst empty_inst;
+
 typedef struct IFIDregister {
   int pc;
   int new_pc;
@@ -26,7 +38,7 @@ IFID emptyIFID;
 typedef struct IDEXregister {
   int pc;
   int new_pc;
-  int instruction;
+  inst instruction;
   int vala;
   int valb;
   bool memRead;
@@ -53,7 +65,7 @@ typedef struct EXMEMregister {
   int ALU_result;
   int valb;
   int dest;
-  int instruction;
+  inst instruction;
 
   bool memRead;
   bool memWrite;
@@ -81,7 +93,7 @@ MEMWB MEMo;
 MEMWB WBi;
 MEMWB emptyMEMWB;
 
-long ALU(int vala, int valb, int valc, int instruction);
+long ALU(int vala, int valb, int valc, inst instruction);
 
 void init();
 

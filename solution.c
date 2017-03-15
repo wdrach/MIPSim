@@ -2,7 +2,7 @@
 #include "processor.h"
 
 int main() {
-  read_file("./examples/simple_loops.txt");
+  read_file("./examples/loops.txt");
   init();
   while(step());
 }
