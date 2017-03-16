@@ -83,6 +83,7 @@ typedef struct MEMWBregister {
   int data;
   int ALU_result;
   int dest;
+  inst instruction;
 
   bool RegWrite;
   bool memToReg;

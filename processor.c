@@ -1,5 +1,6 @@
 #include "processor.h"
 //TODO: opcodes 0x18-0x2B not implemented in ALU
+//TODO: Multiplication/division don't need to be added, remove them
 
 int memory[MEMSIZE] = {0};
 int mem_start = 0;
@@ -59,6 +60,7 @@ void init() {
   emptyMEMWB.dest = 0;
   emptyMEMWB.RegWrite = false;
   emptyMEMWB.memToReg = false;
+  emptyMEMWB.instruction = empty_inst;
   MEMo = emptyMEMWB;
   WBi = emptyMEMWB;
 }
@@ -287,6 +289,7 @@ void EX() {
 
   EXo.ALU_result = ALU(vala, valb, valc, instruction);
   //TODO: implement high/low register instructions
+  //     - Do we need to do this with no mult/div?
 
   //branch & jump instructions
   if (EXi.branch) {
@@ -344,6 +347,7 @@ void MEM() {
   MEMo.RegWrite = MEMi.RegWrite;
   MEMo.memToReg = MEMi.memToReg;
   MEMo.pc = MEMi.pc;
+  MEMo.instruction = MEMi.instruction;
 
   int opcode = MEMi.instruction.opcode;
 
@@ -479,7 +483,7 @@ long ALU(int input1, int input2, int input3, inst instruction) {
   long tmp = 0;
   int funct = instruction.funct;
   int opcode = instruction.opcode;
-  int addr = pc*4 + mem_start;
+  int addr = EXi.pc*4 + mem_start;
   switch(opcode) {
     case 0x01:
       result = input2 << 2;
