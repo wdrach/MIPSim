@@ -119,6 +119,41 @@ bool step() {
   return ret;
 }
 
+void hazard_detection() {
+  //TODO: Detect load-use hazard (lecture 17)
+  //EX forwarding
+  if (EXo.RegWrite && EXo.instruction.rd != 0) {
+    if (EXo.instruction.rd == IDo.instruction.rs) {
+      IDo.vala = EXo.ALU_result;
+      return;
+    }
+    else if (EXo.instruction.rd == IDo.instruction.rt) {
+      IDo.valb = EXo.ALU_result;
+      return;
+    }
+  }
+
+  //MEM forwarding
+  if (MEMo.RegWrite && MEMo.instruction.rd != 0) {
+    if (MEMo.instruction.rd == IDo.instruction.rs) {
+      if (MEMo.memToReg) {
+        IDo.vala = MEMo.data;
+      }
+      else {
+        IDo.vala = MEMo.ALU_result;
+      }
+    }
+    else if (MEMo.instruction.rd == IDo.instruction.rt) {
+      if (MEMo.memToReg) {
+        IDo.valb = MEMo.data;
+      }
+      else {
+        IDo.valb = MEMo.ALU_result;
+      }
+    }
+  }
+}
+
 void IF() {
   if (stall_IF) return;
 
