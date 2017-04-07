@@ -95,10 +95,10 @@ void read_file(char* filename) {
 
 bool clock() {
   //update registers
-  IDi = IFo;
-  EXi = IDo;
-  MEMi = EXo;
-  WBi = MEMo;
+  if (!stall_ID) IDi = IFo;
+  if (!stall_EX) EXi = IDo;
+  if (!stall_MEM) MEMi = EXo;
+  if (!stall_WB) WBi = MEMo;
 
   //run through the cycles
   IF();
@@ -106,6 +106,8 @@ bool clock() {
   EX();
   MEM();
   WB();
+
+  hazard_detection();
 
   if (pc < 0) return false;
   return true;
@@ -122,7 +124,12 @@ bool step() {
 }
 
 void hazard_detection() {
-  //TODO: Detect load-use hazard (lecture 17)
+  if (IDo.memWrite && (EXo.instruction.rt == IDo.instruction.rs || EXo.instruction.rt == IDo.instruction.rt)) {
+    stall_EX = true;
+    stall_MEM = true;
+    stall_WB = true;
+  }
+
   //EX forwarding
   if (EXo.RegWrite && EXo.instruction.rd != 0) {
     if (EXo.instruction.rd == IDo.instruction.rs) {

@@ -112,4 +112,6 @@ void EX();
 void MEM();
 void WB();
 
+void hazard_detection();
+
 #endif
