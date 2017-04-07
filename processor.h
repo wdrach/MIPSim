@@ -5,10 +5,14 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define MEMSIZE 1000
+#define MEMSIZE 1200
 
-#define RA 31
 #define SP 29
+#define FP 30
+#define RA 31
+
+int memory[MEMSIZE];
+unsigned long clock_cycles;
 
 typedef struct deconstructed_instruction {
   int opcode;

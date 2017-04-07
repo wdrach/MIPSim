@@ -5,7 +5,8 @@
 int memory[MEMSIZE] = {0};
 int mem_start = 0;
 int registers[32] = {0};
-int pc = 0;
+int pc = 1;
+unsigned long clock_cycles = 0;
 
 //bools for stalling
 bool stall_IF = false;
@@ -67,30 +68,27 @@ void init() {
 
 void read_file(char* filename) {
   FILE* fp = fopen(filename, "r");
-  char buf[50];
+  char buf[100];
   char* temp;
 
-  //set starting address
-  fgets(buf, 50, fp);
-  temp = strtok(buf, ": ");
-  int addr = strtol(temp, NULL, 16);
-  mem_start = addr;
-  temp = strtok(NULL, ": ");
+  //start strtok
+  fgets(buf, 100, fp);
+  temp = strtok(buf, ", ");
   int instruction = strtol(temp, NULL, 16);
   memory[0] = instruction;
 
-
-  while(fgets(buf, 50, fp) != NULL) {
-    temp = strtok(buf, ": ");
-    addr = strtol(temp, NULL, 16);
-    temp = strtok(NULL, ": ");
+  int i = 1;
+  while(fgets(buf, 100, fp) != NULL) {
+    temp = strtok(buf, ",");
     instruction = strtol(temp, NULL, 16);
-    memory[(addr-mem_start)/4] = instruction;
+    memory[i] = instruction;
+    i++;
   }
 
   //set SP to end of memory
-  //TODO: fix this to do a proper stack
-  registers[SP] = addr + 4;
+  registers[SP] = memory[0];
+  registers[FP] = memory[1];
+  pc = memory[5];
 }
 
 bool clock() {
@@ -109,7 +107,9 @@ bool clock() {
 
   hazard_detection();
 
-  if (pc < 0) return false;
+  clock_cycles++;
+
+  if (pc <= 0) return false;
   return true;
 }
 
@@ -124,11 +124,13 @@ bool step() {
 }
 
 void hazard_detection() {
+  /*
   if (IDo.memWrite && (EXo.instruction.rt == IDo.instruction.rs || EXo.instruction.rt == IDo.instruction.rt)) {
     stall_EX = true;
     stall_MEM = true;
     stall_WB = true;
   }
+  */
 
   //EX forwarding
   if (EXo.RegWrite && EXo.instruction.rd != 0) {
@@ -192,7 +194,8 @@ void ID() {
   if (opcode == 0x00) {
     //R type instructions
     //deconstruct
-    IDo.instruction.funct = instruction&0x3F;
+    int funct = instruction&0x3F;
+    IDo.instruction.funct = funct;
     IDo.instruction.rs = (instruction&0x03E00000)>>21;
     IDo.instruction.rt = (instruction&0x001F0000)>>16;
     IDo.instruction.shamt = (instruction & 0x7C0)>>6;
@@ -201,6 +204,8 @@ void ID() {
     IDo.dest = (instruction&0x0000F800)>>11;
     IDo.instruction.rd = IDo.dest;
     IDo.RegWrite = true;
+
+    if (funct == 0x08 || funct == 0x09) IDo.branch = true;
   }
   else if (opcode == 0x02 || opcode == 0x03) {
     //J type instructions
@@ -216,7 +221,6 @@ void ID() {
     IDo.valb = (int) ((short int) (instruction&0x0000FFFF));
     IDo.instruction.immediate = IDo.valb;
     IDo.dest = (instruction&0x001F0000)>>16;
-    printf("I type instruction, immediate: %d\n", IDo.valb);
 
     if (opcode == 0x01 || opcode == 0x04 || opcode == 0x05) {
       //branch instructions
@@ -245,7 +249,7 @@ void ID() {
 
 void branch(int addr) {
   pc = (addr-mem_start)/4;
-  printf("Branching to address: %08x\nPC: %d\n", addr, pc);
+
   //clear everything
   IFo = emptyIFID;
   IDi = emptyIFID;
@@ -289,6 +293,9 @@ void EX() {
     if (funct == 0x00 || funct == 0x02 || funct == 0x03) {
       vala = valb;
       valb = instruction.shamt;
+    }
+    else if (funct == 0x0A || funct == 0x0B) {
+      valc = registers[EXi.dest];
     }
   }
 
@@ -597,6 +604,10 @@ long ALU(int input1, int input2, int input3, inst instruction) {
         return(result);
       case 0x08:
         return(input2);
+      case 0x0A:
+        return input2 ? input3 : input1;
+      case 0x0B:
+        return input2 ? input1 : input3;
       case 0x10:
         return(input1);
       case 0x12:
