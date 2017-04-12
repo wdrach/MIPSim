@@ -1,7 +1,7 @@
 #include "processor.h"
 //TODO: opcodes 0x18-0x2B not implemented in ALU
 
-//#define DEBUG 0
+//#define DEBUG 1
 
 int memory[MEMSIZE] = {0};
 int mem_start = 0;
@@ -131,11 +131,17 @@ bool clock() {
   MEM();
   WB();
 
+  stall_IF = false;
+  stall_ID = false;
+  stall_EX = false;
+  stall_MEM = false;
+  stall_WB = false;
+
   hazard_detection();
 
   clock_cycles++;
 
-  if (pc <= 0) return false;
+  if (pc <= 1) return false;
   return true;
 }
 
@@ -154,12 +160,9 @@ void hazard_detection() {
 #ifdef DEBUG
   printf("Load/Use hazard detected, stalled\n");
 #endif
-    printf("Load/Use stall disabled\n");
-  /*
     stall_EX = true;
     stall_MEM = true;
     stall_WB = true;
-   */
   }
 
   //EX forwarding
@@ -296,7 +299,7 @@ void ID() {
     IDo.instruction.immediate = IDo.valb;
     IDo.dest = (instruction&0x001F0000)>>16;
 
-    if (opcode == 0x01 || opcode == 0x04 || opcode == 0x05) {
+    if (opcode == 0x01 || (opcode > 0x03 && opcode < 0x08)) {
       //branch instructions
       IDo.branch = true;
     }
@@ -343,7 +346,7 @@ void branch_link(int addr) {
 
 void EX() {
 #ifdef DEBUG
-  printf("In EX stage.\n");
+  printf("In EX stage, pc %d.\n", EXi.pc);
 #endif
 
   if (stall_EX) {
@@ -372,7 +375,7 @@ void EX() {
   printf("Opcode: %02x\n", opcode);
 #endif
 
-  if (opcode == 0x04 || opcode == 0x05) {
+  if (opcode == 0x04 || opcode == 0x05 || opcode == 0x01 || opcode == 0x06 || opcode == 0x07) {
     vala = registers[EXi.dest];
     valb = EXi.vala;
     valc = EXi.valb;
@@ -406,28 +409,28 @@ void EX() {
     switch (opcode) {
       case 0x04:
         //branch on equal
-        if (vala == valb) branch(EXo.ALU_result);
+        if (vala == valb) branch(EXo.ALU_result + 4);
         break;
       case 0x05:
         //branch not equal
-        if (vala != valb) branch(EXo.ALU_result);
+        if (vala != valb) branch(EXo.ALU_result + 4);
         break;
       case 0x01: {
         //branch >= 0 and branch > 0
-        if ((valb == 1 && vala >= 0) || (valb == 0 && vala > 0)) {
-          branch(EXo.ALU_result);
+        if ((vala == 1 && valb >= 0) || (vala == 0 && valb > 0)) {
+          branch(EXo.ALU_result + 4);
         }
         //branch >= 0 and link
-        else if ((valb == 0x11 && vala >= 0) || (valb == 0x10 && vala < 0)) {
+        else if ((vala == 0x11 && valb >= 0) || (vala == 0x10 && valb < 0)) {
           branch_link(EXo.ALU_result);
         }
         break;
       }
       case 0x07:
-        if (vala > 0) branch(EXo.ALU_result);
+        if (valb > 0) branch(EXo.ALU_result + 4);
         break;
       case 0x06:
-        if (vala <= 0) branch(EXo.ALU_result);
+        if (valb <= 0) branch(EXo.ALU_result + 4);
         break;
       case 0x02: {
         branch(EXo.ALU_result);
@@ -517,7 +520,7 @@ void MEM() {
         }
 
         //sign extend
-        if (opcode == 0x20) data = data&0x8000 ? data|0xFFFF0000 : data;
+        if (opcode == 0x21) data = data&0x8000 ? data|0xFFFF0000 : data;
         break;
       }
       case 0x22:
@@ -630,10 +633,12 @@ long ALU(int input1, int input2, int input3, inst instruction) {
       result = tmp | input2<<2;
       return(result);
     case 0x04:
+      //beq
       result = input3 << 2;
       result += addr;
       return(result);
     case 0x05:
+      //bne
       result = input3 << 2;
       result += addr;
       return(result);
@@ -691,12 +696,15 @@ long ALU(int input1, int input2, int input3, inst instruction) {
       result = input1 + input2;
       return(result);
     case 0x28:
+      //sb
       result = input1 + input2;
       return(result);
     case 0x29:
+      //sh
       result = input1 + input2;
       return(result);
     case 0x2B:
+      //sw
       result = input1 + input2;
       return(result);
   }
@@ -706,7 +714,7 @@ long ALU(int input1, int input2, int input3, inst instruction) {
         result = input1 << input2;
         return(result);
       case 0x02:
-        result = (int) ((unsigned int) input1) >> input2;
+        result = (int) ((unsigned int) input1 >> input2);
         return(result);
       case 0x03:
         result = input1 >> input2;
@@ -775,7 +783,7 @@ long ALU(int input1, int input2, int input3, inst instruction) {
         return(result);
     }
   }
-  printf("instruction opcode: %d function : %d not found/n", opcode, funct);
+  printf("instruction opcode: %02x function : %02x not found\n", opcode, funct);
   return(0);
 }
 
