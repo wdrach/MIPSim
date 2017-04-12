@@ -1,6 +1,7 @@
 #include "processor.h"
 //TODO: opcodes 0x18-0x2B not implemented in ALU
-//TODO: Multiplication/division don't need to be added, remove them
+
+//#define DEBUG 0
 
 int memory[MEMSIZE] = {0};
 int mem_start = 0;
@@ -16,6 +17,10 @@ bool stall_MEM = false;
 bool stall_WB = false;
 
 void init() {
+#ifdef DEBUG
+  printf("Initializing everything\n");
+#endif
+
   //zero out EVERYTHING
   empty_inst.opcode = 0;
   empty_inst.rs = 0;
@@ -64,9 +69,16 @@ void init() {
   emptyMEMWB.instruction = empty_inst;
   MEMo = emptyMEMWB;
   WBi = emptyMEMWB;
+
+#ifdef DEBUG
+  printf("Initialization complete\n");
+#endif
 }
 
 void read_file(char* filename) {
+#ifdef DEBUG
+  printf("Reading file\n");
+#endif
   FILE* fp = fopen(filename, "r");
   char buf[100];
   char* temp;
@@ -89,14 +101,28 @@ void read_file(char* filename) {
   registers[SP] = memory[0];
   registers[FP] = memory[1];
   pc = memory[5];
+#ifdef DEBUG
+  printf("Reading file complete\n");
+#endif
 }
 
 bool clock() {
+#ifdef DEBUG
+  printf("Starting clock cycle\n");
+#endif
   //update registers
-  if (!stall_ID) IDi = IFo;
-  if (!stall_EX) EXi = IDo;
-  if (!stall_MEM) MEMi = EXo;
-  if (!stall_WB) WBi = MEMo;
+  if (!stall_ID) {
+    IDi = IFo;
+  }
+  if (!stall_EX) {
+    EXi = IDo;
+  }
+  if (!stall_MEM) {
+    MEMi = EXo;
+  }
+  if (!stall_WB) {
+    WBi = MEMo;
+  }
 
   //run through the cycles
   IF();
@@ -124,16 +150,23 @@ bool step() {
 }
 
 void hazard_detection() {
-  /*
   if (IDo.memWrite && (EXo.instruction.rt == IDo.instruction.rs || EXo.instruction.rt == IDo.instruction.rt)) {
+#ifdef DEBUG
+  printf("Load/Use hazard detected, stalled\n");
+#endif
+    printf("Load/Use stall disabled\n");
+  /*
     stall_EX = true;
     stall_MEM = true;
     stall_WB = true;
+   */
   }
-  */
 
   //EX forwarding
   if (EXo.RegWrite && EXo.instruction.rd != 0) {
+#ifdef DEBUG
+  printf("EX hazard detected, forwarding\n");
+#endif
     if (EXo.instruction.rd == IDo.instruction.rs) {
       IDo.vala = EXo.ALU_result;
       return;
@@ -146,6 +179,9 @@ void hazard_detection() {
 
   //MEM forwarding
   if (MEMo.RegWrite && MEMo.instruction.rd != 0) {
+#ifdef DEBUG
+  printf("MEM hazard detected, forwarding\n");
+#endif
     if (MEMo.instruction.rd == IDo.instruction.rs) {
       if (MEMo.memToReg) {
         IDo.vala = MEMo.data;
@@ -166,7 +202,16 @@ void hazard_detection() {
 }
 
 void IF() {
-  if (stall_IF) return;
+#ifdef DEBUG
+  printf("In IF stage, pc %d\n", pc);
+#endif
+
+  if (stall_IF) {
+#ifdef DEBUG
+  printf("IF stall\n");
+#endif
+    return;
+  }
 
   IFo = emptyIFID;
   IFo.pc = pc;
@@ -176,7 +221,16 @@ void IF() {
 }
 
 void ID() {
-  if (stall_ID) return;
+#ifdef DEBUG
+  printf("In ID stage, pc %d\n", IDi.pc);
+#endif
+
+  if (stall_ID) {
+#ifdef DEBUG
+  printf("ID stall\n");
+#endif
+    return;
+  }
 
   IDo = emptyIDEX;
   //the simple forwarding of some registers
@@ -190,6 +244,10 @@ void ID() {
   int instruction = IDi.instruction;
 
   int opcode = (instruction & 0xFC000000)>>26;
+#ifdef DEBUG
+  printf("opcode: %08x\n", opcode);
+#endif
+
   IDo.instruction.opcode = opcode;
   if (opcode == 0x00) {
     //R type instructions
@@ -205,15 +263,31 @@ void ID() {
     IDo.instruction.rd = IDo.dest;
     IDo.RegWrite = true;
 
-    if (funct == 0x08 || funct == 0x09) IDo.branch = true;
+
+    if (funct == 0x08 || funct == 0x09) {
+      IDo.branch = true;
+      IDo.RegWrite = false;
+    }
+
+#ifdef DEBUG
+  printf("R type instruction detected. funct: %08x\n", funct);
+#endif
   }
   else if (opcode == 0x02 || opcode == 0x03) {
     //J type instructions
     IDo.instruction.immediate = instruction & 0x3FFFFFF;
     IDo.valb = IDo.instruction.immediate;
     IDo.branch = true;
+
+#ifdef DEBUG
+  printf("J type instruction detected. jump immed: %08x\n", IDo.instruction.immediate);
+#endif
   }
   else {
+#ifdef DEBUG
+  printf("I type instruction detected.\n");
+#endif
+
     //I type instructions
     IDo.instruction.rs = (instruction&0x03E00000)>>21;
     IDo.vala = registers[IDo.instruction.rs];
@@ -250,6 +324,10 @@ void ID() {
 void branch(int addr) {
   pc = (addr-mem_start)/4;
 
+#ifdef DEBUG
+  printf("Branching to new pc %d.\n", pc);
+#endif
+
   //clear everything
   IFo = emptyIFID;
   IDi = emptyIFID;
@@ -264,7 +342,16 @@ void branch_link(int addr) {
 }
 
 void EX() {
-  if (stall_EX) return;
+#ifdef DEBUG
+  printf("In EX stage.\n");
+#endif
+
+  if (stall_EX) {
+#ifdef DEBUG
+  printf("Stalling EX.\n");
+#endif
+    return;
+  }
 
   EXo = emptyEXMEM;
   //simple forwarding
@@ -281,6 +368,9 @@ void EX() {
   int valc = 0;
   inst instruction = EXi.instruction;
   int opcode = instruction.opcode;
+#ifdef DEBUG
+  printf("Opcode: %02x\n", opcode);
+#endif
 
   if (opcode == 0x04 || opcode == 0x05) {
     vala = registers[EXi.dest];
@@ -290,6 +380,9 @@ void EX() {
   //shamt!
   if (opcode == 0x00) {
     int funct = instruction.funct;
+#ifdef DEBUG
+  printf("Funct: %02x\n", funct);
+#endif
     if (funct == 0x00 || funct == 0x02 || funct == 0x03) {
       vala = valb;
       valb = instruction.shamt;
@@ -302,6 +395,9 @@ void EX() {
   EXo.valb = valb;
 
   EXo.ALU_result = ALU(vala, valb, valc, instruction);
+#ifdef DEBUG
+  printf("vala: %04x | valb: %04x | valc: %04x | result: %04x\n", vala, valb, valc, EXo.ALU_result);
+#endif
   //TODO: implement high/low register instructions
   //     - Do we need to do this with no mult/div?
 
@@ -352,7 +448,15 @@ void EX() {
 }
 
 void MEM() {
-  if (stall_MEM) return;
+#ifdef DEBUG
+  printf("In MEM stage.\n");
+#endif
+  if (stall_MEM) {
+#ifdef DEBUG
+  printf("Stalling MEM stage.\n");
+#endif
+    return;
+  }
 
   MEMo = emptyMEMWB;
   //simple forwarding
@@ -368,6 +472,9 @@ void MEM() {
   //load instructions
   if (MEMi.memRead) {
     int full_word = memory[(MEMi.ALU_result - mem_start)/4];
+#ifdef DEBUG
+  printf("Loading from memory.\n");
+#endif
 
     switch (opcode) {
       case 0x20:
@@ -432,6 +539,9 @@ void MEM() {
 
   //similar to all of the read stuff, just with write
   if (MEMi.memWrite) {
+#ifdef DEBUG
+  printf("Writing to memory.\n");
+#endif
     int addr = (MEMi.ALU_result - mem_start)/4;
     switch (opcode) {
       case 0x28:
@@ -487,7 +597,15 @@ void MEM() {
 }
 
 void WB() {
-  if (stall_WB) return;
+#ifdef DEBUG
+  printf("In WB stage.\n");
+#endif
+  if (stall_WB) {
+#ifdef DEBUG
+  printf("Stalling WB stage.\n");
+#endif
+    return;
+  }
   //if we need to write, write!
   if (WBi.RegWrite && WBi.dest != 0) registers[WBi.dest] = WBi.memToReg ? WBi.data : WBi.ALU_result;
 }
