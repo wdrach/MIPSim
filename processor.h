@@ -22,7 +22,10 @@ typedef struct deconstructed_instruction {
   int shamt;
   int funct;
   int immediate;
+  int dest;
 } inst;
+
+inst empty_inst;
 
 typedef struct data {
   int mem;
@@ -33,6 +36,8 @@ typedef struct data {
   int ALU_result;
 } read_data;
 
+read_data empty_data;
+
 typedef struct IFIDregister {
   int pc;
   int new_pc;
@@ -40,6 +45,7 @@ typedef struct IFIDregister {
 } IFIDreg;
 
 //IFID registers for the output of the IF stage
+IFIDreg empty_IFID;
 IFIDreg IFID;
 
 typedef struct IDEXregister {
@@ -54,14 +60,15 @@ typedef struct IDEXregister {
   bool branch;
   bool reg_write;
   bool mem_to_reg;
-  bool ALU_src;
 } IDEXreg;
 
 //Same deal as with IFID, but now with IDEX
+IDEXreg empty_IDEX;
 IDEXreg IDEX;
 
 typedef struct EXMEMregister {
   int pc;
+  int new_pc;
 
   read_data data;
   inst instruction;
@@ -74,6 +81,7 @@ typedef struct EXMEMregister {
 } EXMEMreg;
 
 //and again!
+EXMEMreg empty_EXMEM
 EXMEMreg EXMEM
 
 typedef struct MEMWBregister {
@@ -87,6 +95,7 @@ typedef struct MEMWBregister {
 } MEMWBreg;
 
 //AND ANOTHER ONE
+MEMWBreg empty_MEMWB
 MEMWBreg MEMWB
 
 long ALU(read_data data, inst instruction);

@@ -1,5 +1,4 @@
 #include "processor.h"
-//TODO: opcodes 0x18-0x2B not implemented in ALU
 
 int memory[MEMSIZE] = {0};
 int mem_start = 0;
@@ -14,7 +13,7 @@ bool stall_EX = false;
 bool stall_MEM = false;
 bool stall_WB = false;
 
-void read_file(char* filename) {
+void init(char* filename) {
   FILE* fp = fopen(filename, "r");
   char buf[100];
   char* temp;
@@ -33,10 +32,63 @@ void read_file(char* filename) {
     i++;
   }
 
-  //set SP to end of memory
+  //set SP, FP, pc
   registers[SP] = memory[0];
   registers[FP] = memory[1];
   pc = memory[5];
+
+  //Build empty structures and zero out everything
+  empty_inst.opcode = 0;
+  empty_inst.rs = 0;
+  empty_inst.rt = 0;
+  empty_inst.rd = 0;
+  empty_inst.shamt = 0;
+  empty_inst.funct = 0;
+  empty_inst.immediate = 0;
+  empty_inst.dest = 0;
+
+  empty_data.mem = 0;
+  empty_data.rs = 0;
+  empty_data.rt = 0;
+  empty_data.rd = 0;
+  empty_data.immediate = 0;
+  empty_data.ALU_result = 0;
+
+  empty_IFID.pc = 0;
+  empty_IFID.new_pc = 0;
+  empty_IFID.instruction = 0;
+
+  empty_IDEX.pc = 0;
+  empty_IDEX.new_pc = 0;
+  empty_IDEX.instruction = empty_inst;
+  empty_IDEX.data = empty_data;
+  empty_IDEX.mem_read = false;
+  empty_IDEX.mem_write = false;
+  empty_IDEX.branch = false;
+  empty_IDEX.reg_write = false;
+  empty_IDEX.mem_to_reg = false;
+
+  empty_EXMEM.pc = 0;
+  empty_EXMEM.new_pc = 0;
+  empty_EXMEM.data = empty_data;
+  empty_EXMEM.instruction = empty_inst;
+  empty_EXMEM.mem_read = false;
+  empty_EXMEM.mem_write = false;
+  empty_EXMEM.branch = false;
+  empty_EXMEM.reg_write = false;
+  empty_EXMEM.mem_to_reg = false;
+
+  empty_MEMWB.pc = 0;
+  empty_MEMWB.data = empty_data;
+  empty_MEMWB.instruction = empty_inst;
+  empty_MEMWB.reg_write = false;
+  empty_MEMWB.mem_to_reg = false;
+
+  //set everything up as empty
+  IFID = empty_IFID;
+  IDEX = empty_IDEX;
+  EXMEM = empty_EXMEM;
+  MEMWB = empty_MEMWB;
 }
 
 bool clock() {
@@ -63,21 +115,16 @@ bool clock() {
   return true;
 }
 
-bool step() {
-  printf("\n\nStepping through code, clock running.\n");
-  bool ret = clock();
-  printf("\nPrinting Registers:");
-  print_registers();
-  printf("Press any key to step.\n");
-  getchar();
-  return ret;
-}
-
 void hazard_detection() {
+  //TODO: implement this
 }
 
 void IF() {
   if (stall_IF) return;
+
+  //TODO: check this, should this be before the stall? If so, fix
+  //      all of these statements
+  IFID = emptyIFID;
 
   IFID.pc = pc;
   IFID.instruction = memory[pc];
@@ -90,6 +137,8 @@ void IF() {
 void ID() {
   if (stall_ID) return;
 
+  IDEX = emptyIDEX;
+
   //simple forwarding
   IDEX.pc = IFID.pc;
   IDEX.new_pc = IFID.new_pc;
@@ -99,14 +148,97 @@ void ID() {
   //  I: opcode (6) | rs (5) | rt (5) | IMM (16)
   //  J: opcode (6) | Pseudo-Address (26)
 
-  int instruction = IDi.instruction;
+  int instruction = IFID.instruction;
+  int opcode = (instruction&0xFC000000)>>26;
+  
+  IDEX.instruction.opcode = opcode;
+
+  if (opcode == 0x00 || opcode == 0x1F) {
+    //R type instructions. All instructions of the same type should have
+    //the same "instruction" registers
+    int funct = instruction & 0x3F;
+
+    IDEX.instruction.funct = funct;
+
+    IDEX.instruction.rs = (instruction&0x03E00000)>>21;
+    IDEX.instruction.rt = (instruction&0x001F0000)>>16;
+    IDEX.instruction.rd = (instruction&0x0000F800)>>11;
+
+    IDEX.instruction.shamt = (instruction&0x7C0)>>6;
+
+    IDEX.instruction.dest = IDEX.instruction.rd;
+
+    //fill data
+    IDEX.data.rs = registers[IDEX.instruction.rs];
+    IDEX.data.rt = registers[IDEX.instruction.rt];
+    IDEX.data.rd = registers[IDEX.instruction.rd];
+
+    //set the control booleans
+    if (funct == 0x08) {
+      //jr instruction
+      IDEX.branch = true;
+    }
+    else {
+      //all of the arithmetic ops
+      IDEX.reg_write = true;
+    }
+  }
+  else if (opcode == 0x02 || opcode == 0x03) {
+    //J instructions
+    IDEX.instruction.immediate = instruction & 0x3FFFFFFF;
+
+    IDEX.data.immediate = IDEX.instruction.immediate;
+
+    //set the control booleans
+    IDEX.branch = true;
+  }
+  else {
+    //I instructions
+    IDEX.instruction.rs = (instruction&0x03E00000)>>21;
+    IDEX.instruction.rt = (instruction&0x001F0000)>>16;
+    IDEX.instruction.immediate = (int) ((short int) (instruction&0x0000FFFF));
+
+    //fill data
+    IDEX.data.immediate = IDEX.instruction.immediate;
+    IDEX.data.rs = registers[IDEX.instruction.rs];
+    IDEX.data.rt = registers[IDEX.instruction.rt];
+
+    //set the control booleans
+    if (opcode >= 0x08 && opcode <= 0x0F) {
+      //Arithmetic operations
+      IDEX.reg_write = true;
+
+      //set dest
+      IDEX.instruction.dest = IDEX.instruction.rt;
+    }
+    else if ((opcode >= 0x04 && opcode <= 0x07) || opcode == 0x01) {
+      //Branch operations
+      IDEX.branch = true;
+    }
+    else if ((opcode >= 0x23 && opcode <= 0x25) || opcode == 0x20) {
+      //Load operations
+      IDEX.mem_read = true;
+      IDEX.reg_write = true;
+      IDEX.mem_to_reg = true;
+
+      //set dest
+      IDEX.instruction.dest = IDEX.instruction.rt;
+    }
+    else if ((opcode >= 0x28 && opcode <= 0x29) || opcode == 0x2B) {
+      //Store operations
+      IDEX.mem_write = true;
+    }
+  }
 }
 
 void EX() {
   if (stall_EX) return;
 
+  EXMEM = emptyEXMEM;
+
   //simple copies
   EXMEM.pc = IDEX.pc;
+  EXMEM.new_pc = EXMEM.new_pc;
   EXMEM.instruction = IDEX.instruction;
   EXMEM.mem_read = IDEX.mem_read;
   EXMEM.mem_write = IDEX.mem_write;
@@ -114,137 +246,34 @@ void EX() {
   EXMEM.reg_write = IDEX.reg_write;
   EXMEM.mem_to_reg = IDEX.mem_to_reg;
 
+  //TODO: exec
+
 }
 
 void MEM() {
   if (stall_MEM) return;
 
-  //simple copies
-  //TODO: switch this to the new stuff
+  MEMWB = emptyMEMWB;
 
-  int opcode = MEMi.instruction.opcode;
+  //simple copies
+  MEMWB.reg_write = EXMEM.reg_write;
+  MEMWB.mem_to_reg = EXMEM.mem_to_reg;
+
+  int opcode = MEMWB.instruction.opcode;
 
   //load instructions
-  if (MEMi.memRead) {
-    int full_word = memory[(MEMi.ALU_result - mem_start)/4];
-#ifdef DEBUG
-  printf("Loading from memory.\n");
-#endif
+  if (MEMWB.mem_read) {
+    int addr = MEMWB.data.ALU_result;
 
-    switch (opcode) {
-      case 0x20:
-        //load byte
-      case 0x24: {
-        //load unsigned byte
-        int data = 0;
+    int full_word = memory[(addr - mem_start)/4];
 
-        switch (MEMi.ALU_result%4) {
-          case 0:
-            data = 0x000000FF & full_word;
-            break;
-          case 1:
-            data = (0x0000FF00 & full_word)>>8;
-            break;
-          case 2:
-            data = (0x00FF0000 & full_word)>>16;
-            break;
-          case 3:
-            data = (0xFF000000 & full_word)>>24;
-            break;
-        }
-        //sign extend if needed
-        if (opcode == 0x20) data = data&0x80 ? data|0xFFFFFF00 : data;
-        break;
-      }
-      case 0x21:
-        //Load unsigned halfword
-      case 0x25: {
-        //Load halfword
-        //very similar to byte, just different adjustments
-        int data;
-        switch(MEMi.ALU_result%2) {
-          case 0:
-            data = 0x0000FFFF & full_word;
-            break;
-          case 1:
-            data = (0xFFFF0000 & full_word)>>16;
-            break;
-        }
-
-        //sign extend
-        if (opcode == 0x21) data = data&0x8000 ? data|0xFFFF0000 : data;
-        break;
-      }
-      case 0x22:
-        //Load word right (C division will do this for us)
-      case 0x23:
-        //Load word
-        MEMo.data = full_word;
-        break;
-      case 0x26: {
-        //Load word left
-        int addr = (MEMi.ALU_result - mem_start)/4;
-        addr += MEMi.ALU_result%4 == 0 ? 0 : 1;
-        MEMo.data = memory[addr];
-        break;
-      }
-    }
+    //TODO: extract from the full word
   }
-  else MEMo.data = 0;
+  else MEMWB.data.mem = 0;
 
   //similar to all of the read stuff, just with write
-  if (MEMi.memWrite) {
-    int addr = (MEMi.ALU_result - mem_start)/4;
-    switch (opcode) {
-      case 0x28:
-        //store byte
-        switch (MEMi.ALU_result%4) {
-          case 0:
-            memory[addr] &= 0xFFFFFF00;
-            memory[addr] += MEMi.valb;
-            break;
-          case 1:
-            memory[addr] &= 0xFFFF00FF;
-            memory[addr] += MEMi.valb<<8;
-            break;
-          case 2:
-            memory[addr] &= 0xFF00FFFF;
-            memory[addr] += MEMi.valb<<16;
-            break;
-          case 3:
-            memory[addr] &= 0x00FFFFFF;
-            memory[addr] += MEMi.valb<<24;
-            break;
-        }
-        break;
-      case 0x29:
-        //store halfword
-        switch (MEMi.ALU_result%8) {
-          case 0:
-            memory[addr] &= 0xFFFF0000;
-            memory[addr] += MEMi.valb;
-            break;
-          case 1:
-            memory[addr] &= 0x0000FFFF;
-            memory[addr] += MEMi.valb;
-            break;
-        }
-        break;
-      case 0x2A:
-        //store word left
-        addr += MEMi.ALU_result%4 == 0 ? 0 : 1;
-        memory[addr] = MEMi.valb;
-        break;
-      case 0x2B:
-        //store word
-      case 0x2e:
-        //store word right
-      case 0x38:
-        //store conditional
-        //TODO: properly implement this?
-        memory[addr] = MEMi.valb;
-        break;
-    }
+  if (MEMWB.memWrite) {
+    //TODO: write to the correct byte(s)
   }
 }
 
@@ -252,7 +281,10 @@ void WB() {
   if (stall_WB) return;
 
   //if we need to write, write!
-  if (WBi.RegWrite && WBi.dest != 0) registers[WBi.dest] = WBi.memToReg ? WBi.data : WBi.ALU_result;
+  if (MEMWB.reg_write && MEMWB.instruction.dest != 0) {
+    registers[MEMWB.instruction.dest] = MEMWB.mem_to_reg ? MEMWB.data.mem : MEMWB.data.ALU_result;
+  }
 }
 
-long ALU(read_data data, inst instruction);
+long ALU(read_data data, inst instruction) {
+}
