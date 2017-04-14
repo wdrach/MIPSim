@@ -111,16 +111,16 @@ bool clock() {
   printf("Starting clock cycle\n");
 #endif
   //update registers
-  if (!stall_ID) {
+  if (!stall_IF) {
     IDi = IFo;
   }
-  if (!stall_EX) {
+  if (!stall_ID) {
     EXi = IDo;
   }
-  if (!stall_MEM) {
+  if (!stall_EX) {
     MEMi = EXo;
   }
-  if (!stall_WB) {
+  if (!stall_MEM) {
     WBi = MEMo;
   }
 
@@ -160,9 +160,10 @@ void hazard_detection() {
 #ifdef DEBUG
   printf("Load/Use hazard detected, stalled\n");
 #endif
-    stall_EX = true;
-    stall_MEM = true;
-    stall_WB = true;
+    stall_IF = true;
+    stall_ID = true;
+    EXi = emptyIDEX;
+    //return;
   }
 
   //EX forwarding
@@ -315,6 +316,9 @@ void ID() {
         //store instructions
         IDo.memWrite = true;
       }
+
+      IDo.instruction.rs = (instruction&0x03E00000)>>21;
+      IDo.instruction.rt = (instruction&0x001F0000)>>16;
     }
     else {
       //arithmetic instructions
@@ -328,7 +332,7 @@ void branch(int addr) {
   pc = (addr-mem_start)/4;
 
 #ifdef DEBUG
-  printf("Branching to new pc %d.\n", pc);
+  printf("Branching to new pc %d from %d\n", pc, EXi.pc);
 #endif
 
   //clear everything
@@ -422,7 +426,7 @@ void EX() {
         }
         //branch >= 0 and link
         else if ((vala == 0x11 && valb >= 0) || (vala == 0x10 && valb < 0)) {
-          branch_link(EXo.ALU_result);
+          branch_link(EXo.ALU_result + 4);
         }
         break;
       }
@@ -437,7 +441,7 @@ void EX() {
         break;
       }
       case 0x03:
-        branch(EXo.ALU_result);
+        branch_link(EXo.ALU_result);
         break;
       case 0x00: {
         int funct = instruction.funct;
