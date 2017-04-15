@@ -98,7 +98,7 @@ typedef struct MEMWBregister {
 MEMWBreg empty_MEMWB;
 MEMWBreg MEMWB;
 
-long ALU(read_data data, inst instruction);
+int ALU(read_data data, inst instruction);
 
 void init(char* filename);
 

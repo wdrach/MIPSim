@@ -249,8 +249,7 @@ void EX() {
   EXMEM.reg_write = IDEX.reg_write;
   EXMEM.mem_to_reg = IDEX.mem_to_reg;
 
-  //TODO: exec
-
+  EXMEM.data.ALU_result = ALU(IDEX.data, IDEX.instruction);
 }
 
 void MEM() {
@@ -383,7 +382,7 @@ void WB() {
   }
 }
 
-long ALU(read_data data, inst instruction) {
+int ALU(read_data data, inst instruction) {
   int op = instruction.opcode;
   int funct = instruction.funct;
 
@@ -491,7 +490,7 @@ long ALU(read_data data, inst instruction) {
           return data.rt << instruction.shamt;
         case 0x02:
           //srl
-          return (long) (((unsigned int) data.rt) >> instruction.shamt);
+          return (int) (((unsigned int) data.rt) >> instruction.shamt);
         case 0x22:
           //sub
           return data.rs - data.rt;
