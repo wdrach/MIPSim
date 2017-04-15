@@ -232,21 +232,21 @@ void ID() {
   }
   else if (opcode == 0x02 || opcode == 0x03) {
     //J instructions
-    IDEX.instruction.immediate = instruction & 0x3FFFFFFF;
+    IDEX.instruction.immediate = instruction & 0x03FFFFFF;
 
     IDEX.data.immediate = IDEX.instruction.immediate;
 
     switch (opcode) {
       case 0x02:
         //j
-        return branch((pc & 0xFC000000) | IDEX.data.immediate);
+        return branch((pc & 0xFC000000) | (IDEX.data.immediate << 2));
       case 0x03:
         //jal
 
         //link
         registers[RA] = IDEX.new_pc + 4;
         //jump!
-        return branch((pc & 0xFC000000) | IDEX.data.immediate);
+        return branch((pc & 0xFC000000) | (IDEX.data.immediate << 2));
     }
   }
   else {
@@ -270,35 +270,37 @@ void ID() {
     }
     else if ((opcode >= 0x04 && opcode <= 0x07) || opcode == 0x01) {
       //Branch operations
+      int new_addr = (IDEX.new_pc*4) + mem_start + (IDEX.data.immediate << 2);
+
       switch (opcode) {
         case 0x04:
           //beq
           if (IDEX.data.rs == IDEX.data.rt) {
-            return branch(IDEX.new_pc + (IDEX.data.immediate << 2));
+            return branch(new_addr);
           }
           break;
         case 0x05:
           //bne
           if (IDEX.data.rs != IDEX.data.rt) {
-            return branch(IDEX.new_pc + (IDEX.data.immediate << 2));
+            return branch(new_addr);
           }
           break;
         case 0x07:
           //bgtz
           if (IDEX.data.rs > 0) {
-            return branch(IDEX.new_pc + (IDEX.data.immediate << 2));
+            return branch(new_addr);
           }
           break;
         case 0x01:
           //bltz
           if (IDEX.data.rs < 0) {
-            return branch(IDEX.new_pc + (IDEX.data.immediate << 2));
+            return branch(new_addr);
           }
           break;
         case 0x06:
           //blez
           if (IDEX.data.rs <= 0) {
-            return branch(IDEX.new_pc + (IDEX.data.immediate << 2));
+            return branch(new_addr);
           }
           break;
       }
@@ -317,8 +319,6 @@ void ID() {
       IDEX.mem_write = true;
     }
   }
-
-  //TODO: implement branches
 }
 
 void EX() {
@@ -538,9 +538,9 @@ int ALU(read_data data, inst instruction) {
       break;
     case 0x00:
       switch (funct) {
-        case 0x32:
+        case 0x20:
           //add
-        case 0x33:
+        case 0x21:
           //addu
           //Again, the same as add, no traps
           return data.rs + data.rt;
