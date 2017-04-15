@@ -27,7 +27,7 @@ typedef struct deconstructed_instruction {
 
 inst empty_inst;
 
-typedef struct data {
+typedef struct data_registers {
   int mem;
   int rs;
   int rt;
@@ -81,8 +81,8 @@ typedef struct EXMEMregister {
 } EXMEMreg;
 
 //and again!
-EXMEMreg empty_EXMEM
-EXMEMreg EXMEM
+EXMEMreg empty_EXMEM;
+EXMEMreg EXMEM;
 
 typedef struct MEMWBregister {
   int pc;
@@ -95,12 +95,12 @@ typedef struct MEMWBregister {
 } MEMWBreg;
 
 //AND ANOTHER ONE
-MEMWBreg empty_MEMWB
-MEMWBreg MEMWB
+MEMWBreg empty_MEMWB;
+MEMWBreg MEMWB;
 
 long ALU(read_data data, inst instruction);
 
-void read_file(char* filename);
+void init(char* filename);
 
 void hazard_detection();
 

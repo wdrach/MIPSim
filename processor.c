@@ -124,7 +124,7 @@ void IF() {
 
   //TODO: check this, should this be before the stall? If so, fix
   //      all of these statements
-  IFID = emptyIFID;
+  IFID = empty_IFID;
 
   IFID.pc = pc;
   IFID.instruction = memory[pc];
@@ -137,7 +137,7 @@ void IF() {
 void ID() {
   if (stall_ID) return;
 
-  IDEX = emptyIDEX;
+  IDEX = empty_IDEX;
 
   //simple forwarding
   IDEX.pc = IFID.pc;
@@ -234,11 +234,12 @@ void ID() {
 void EX() {
   if (stall_EX) return;
 
-  EXMEM = emptyEXMEM;
+  EXMEM = empty_EXMEM;
 
   //simple copies
   EXMEM.pc = IDEX.pc;
-  EXMEM.new_pc = EXMEM.new_pc;
+  EXMEM.new_pc = IDEX.new_pc;
+  EXMEM.data = IDEX.data;
   EXMEM.instruction = IDEX.instruction;
   EXMEM.mem_read = IDEX.mem_read;
   EXMEM.mem_write = IDEX.mem_write;
@@ -253,27 +254,121 @@ void EX() {
 void MEM() {
   if (stall_MEM) return;
 
-  MEMWB = emptyMEMWB;
+  MEMWB = empty_MEMWB;
 
   //simple copies
+  //TODO: check all of these simple copies
+  MEMWB.pc = EXMEM.pc;
+  MEMWB.data = EXMEM.data;
+  MEMWB.instruction = EXMEM.instruction;
   MEMWB.reg_write = EXMEM.reg_write;
   MEMWB.mem_to_reg = EXMEM.mem_to_reg;
 
-  int opcode = MEMWB.instruction.opcode;
+  int opcode = EXMEM.instruction.opcode;
+
+  //TODO: double check endianness
 
   //load instructions
-  if (MEMWB.mem_read) {
-    int addr = MEMWB.data.ALU_result;
+  if (EXMEM.mem_read) {
+    int addr = EXMEM.data.ALU_result;
 
     int full_word = memory[(addr - mem_start)/4];
 
-    //TODO: extract from the full word
+    //temp variable for signed halfwords
+    int data = 0;
+
+    switch (opcode) {
+      case 0x20:
+        //lb
+      case 0x24:
+        //lbu
+        switch (addr%4) {
+          case 0:
+            data = (full_word & 0xFF000000)>>24;
+            break;
+          case 1:
+            data = (full_word & 0x00FF0000)>>16;
+            break;
+          case 2:
+            data = (full_word & 0x0000FF00)>>8;
+            break;
+          case 3:
+            data = full_word & 0x000000FF;
+            break;
+        }
+
+        //sign extend
+        //TODO: check this
+        if (opcode == 0x20) {
+          data = (int) ((char) data);
+        }
+
+        MEMWB.data.mem = data;
+        break;
+      case 0x25:
+        //lhu
+        switch (addr%2) {
+          case 0:
+            MEMWB.data.mem = (full_word & 0xFFFF0000)>>16;
+            break;
+          case 1:
+            MEMWB.data.mem = full_word & 0x0000FFFF;
+            break;
+        }
+        break;
+      case 0x23:
+        //lw
+        MEMWB.data.mem = full_word;
+        break;
+    }
   }
   else MEMWB.data.mem = 0;
 
   //similar to all of the read stuff, just with write
-  if (MEMWB.memWrite) {
-    //TODO: write to the correct byte(s)
+  if (EXMEM.mem_write) {
+    int addr = EXMEM.data.ALU_result;
+    int word_addr = (addr-mem_start)/4;
+
+    switch (opcode) {
+      case 0x28:
+        //sb
+        switch (addr%4) {
+          case 0:
+            memory[word_addr] &= 0x00FFFFFFF;
+            memory[word_addr] |= EXMEM.data.rt << 24;
+            break;
+          case 1:
+            memory[word_addr] &= 0xFF00FFFF;
+            memory[word_addr] |= (EXMEM.data.rt & 0xFF0000) << 16;
+            break;
+          case 2:
+            memory[word_addr] &= 0xFFFF00FF;
+            memory[word_addr] |= (EXMEM.data.rt & 0xFF00) << 8;
+            break;
+          case 3:
+            memory[word_addr] &= 0xFFFFFF00;
+            memory[word_addr] |= EXMEM.data.rt & 0xFF;
+            break;
+        }
+        break;
+      case 0x29:
+        //sh
+        switch (addr%2) {
+          case 0:
+            memory[word_addr] &= 0x0000FFFF;
+            memory[word_addr] |= EXMEM.data.rt << 16;
+            break;
+          case 1:
+            memory[word_addr] &= 0xFFFF0000;
+            memory[word_addr] |= EXMEM.data.rt & 0xFFFF;
+            break;
+        }
+        break;
+      case 0x2B:
+        //sw
+        memory[word_addr] = EXMEM.data.rt;
+        break;
+    }
   }
 }
 
@@ -287,4 +382,5 @@ void WB() {
 }
 
 long ALU(read_data data, inst instruction) {
+  return 0;
 }

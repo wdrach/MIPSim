@@ -2,9 +2,9 @@
 #include "processor.h"
 
 int main() {
-  read_file("./examples/Program1File.txt");
-  init();
-  while(clock());
+  init("./examples/Program1File.txt");
+  while(clock())
+    ;
 
     printf("Results:\nmem[6]: %d\nmem[7]: %d\nmem[8]: %d\nmem[9]: %d\n", memory[6], memory[7], memory[8], memory[9]);
 
