@@ -12,11 +12,7 @@ int new_pc = 0;
 unsigned long clock_cycles = 0;
 
 //bools for stalling
-bool stall_IF = false;
-bool stall_ID = false;
-bool stall_EX = false;
-bool stall_MEM = false;
-bool stall_WB = false;
+bool stall = false;
 
 void init(char* filename) {
   FILE* fp = fopen(filename, "r");
@@ -103,12 +99,10 @@ bool clock() {
   ID();
   IF();
 
-  //reset all of the stalls
-  stall_IF = false;
-  stall_ID = false;
-  stall_EX = false;
-  stall_MEM = false;
-  stall_WB = false;
+  if (stall) {
+    IDEX = empty_IDEX;
+    stall = false;
+  }
 
   hazard_detection();
 
@@ -136,10 +130,7 @@ void hazard_detection() {
 
     if (IDEX.instruction.rt == IFID_rs ||
         IDEX.instruction.rt == IFID_rt) {
-      stall_IF = true;
-      stall_ID = true;
-      IDEX = empty_IDEX;
-
+      stall = true;
       return;
     }
   }
@@ -174,7 +165,7 @@ void hazard_detection() {
 }
 
 void IF() {
-  if (stall_IF) return;
+  if (stall) return;
   IFID = empty_IFID;
 
   //TODO: check this, should this be before the stall? If so, fix
@@ -191,12 +182,14 @@ void IF() {
 void branch(int addr) {
   branch_taken = true;
   new_pc = (addr - mem_start)/4;
+  if (new_pc != 58 && new_pc != 48)
+    printf("branch from %d to %d\n", IDEX.pc, new_pc);
 
   //TODO: do we have to clear any stages? I don't think so
 }
 
 void ID() {
-  if (stall_ID) return;
+  if (stall) return;
   IDEX = empty_IDEX;
 
   //simple copies
@@ -257,7 +250,8 @@ void ID() {
         //jal
 
         //link
-        registers[RA] = IDEX.new_pc + 4;
+        registers[RA] = (IDEX.new_pc + 1)*4 + mem_start;
+
         //jump!
         return branch((IFID.pc & 0xF0000000) | (IDEX.data.immediate << 2));
     }
@@ -321,7 +315,6 @@ void ID() {
     else if ((opcode >= 0x23 && opcode <= 0x25) || opcode == 0x20) {
       //Load operations
       IDEX.mem_read = true;
-      IDEX.reg_write = true;
       IDEX.mem_to_reg = true;
 
       //set dest
@@ -335,7 +328,6 @@ void ID() {
 }
 
 void EX() {
-  if (stall_EX) return;
   EXMEM = empty_EXMEM;
 
   //simple copies
@@ -354,7 +346,6 @@ void EX() {
 }
 
 void MEM() {
-  if (stall_MEM) return;
   MEMWB = empty_MEMWB;
 
   //simple copies
@@ -470,8 +461,6 @@ void MEM() {
 }
 
 void WB() {
-  if (stall_WB) return;
-
   //if we need to write, write!
   if (MEMWB.reg_write && MEMWB.instruction.dest != 0) {
     registers[MEMWB.instruction.dest] = MEMWB.mem_to_reg ? MEMWB.data.mem : MEMWB.data.ALU_result;
