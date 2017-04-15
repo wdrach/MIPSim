@@ -106,7 +106,6 @@ bool clock() {
 
   hazard_detection();
 
-
   if (branch_taken) {
     pc = new_pc;
     branch_taken = false;
@@ -182,8 +181,7 @@ void IF() {
 void branch(int addr) {
   branch_taken = true;
   new_pc = (addr - mem_start)/4;
-  if (new_pc != 58 && new_pc != 48)
-    printf("branch from %d to %d\n", IDEX.pc, new_pc);
+  //printf("branch from %d to %d\n", IDEX.pc, new_pc);
 
   //TODO: do we have to clear any stages? I don't think so
 }
@@ -278,6 +276,14 @@ void ID() {
     else if ((opcode >= 0x04 && opcode <= 0x07) || opcode == 0x01) {
       //Branch operations
       int new_addr = (IDEX.new_pc*4) + mem_start + (IDEX.data.immediate << 2);
+
+      //a new forwarding condition just for branches
+      if (EXMEM.instruction.dest == IDEX.instruction.rt) {
+        IDEX.data.rt = EXMEM.data.ALU_result;
+      }
+      if (EXMEM.instruction.dest == IDEX.instruction.rs) {
+        IDEX.data.rs = EXMEM.data.ALU_result;
+      }
 
       switch (opcode) {
         case 0x04:
