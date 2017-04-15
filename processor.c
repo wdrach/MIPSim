@@ -229,6 +229,8 @@ void ID() {
       IDEX.mem_write = true;
     }
   }
+
+  //TODO: implement branches
 }
 
 void EX() {
@@ -382,5 +384,127 @@ void WB() {
 }
 
 long ALU(read_data data, inst instruction) {
+  int op = instruction.opcode;
+  int funct = instruction.funct;
+
+  switch (op) {
+    //----------
+    // branches 
+    //----------
+    case 0x04:
+    case 0x05:
+    case 0x06:
+    case 0x07:
+    case 0x01:
+      return 0;
+
+    //-------
+    // jumps
+    //-------
+    case 0x02:
+    case 0x03:
+      printf("Jump got to EX stage, make sure they are implemented properly\n");
+      return 0;
+
+    //------------
+    // immediates
+    //------------
+    case 0x08:
+      //addi
+      //same as addiu, we don't care about traps
+    case 0x09:
+      //addiu
+      return data.rs + data.immediate;
+    case 0x0C:
+      //andi
+      return data.rs & data.immediate;
+    case 0x0E:
+      //xori
+      return data.rs ^ data.immediate;
+    case 0x0D:
+      //ori
+      return data.rs | data.immediate;
+    case 0x0A:
+      //slti
+      return data.rs < data.immediate;
+    case 0x0B:
+      //sltiu
+      return (unsigned int) data.rs < (data.immediate & 0x0000FFFF);
+    case 0x0F:
+      //lui
+      return data.immediate << 16;
+
+    //------------
+    // load/store
+    //------------
+    case 0x20:
+    case 0x24:
+    case 0x25:
+    case 0x23:
+    case 0x28:
+    case 0x29:
+    case 0x2B:
+      return data.rs + data.immediate;
+
+    //--------
+    // R type
+    //--------
+    case 0x1F:
+      //seb
+      if (funct == 0x20) return (int) ((char) (data.rt & 0xFF));
+      break;
+    case 0x00:
+      switch (funct) {
+        case 0x32:
+          //add
+        case 0x33:
+          //addu
+          //Again, the same as add, no traps
+          return data.rs + data.rt;
+        case 0x24:
+          //and
+          return data.rs & data.rt;
+        case 0x08:
+          //jr
+          printf("Jump got to EX stage, make sure they are implemented properly\n");
+          return 0;
+        case 0x27:
+          //nor
+          return ~(data.rs | data.rt);
+        case 0x25:
+          //or
+          return data.rs | data.rt;
+        case 0x0B:
+          //movn
+          return data.rt ? data.rs : data.rd;
+        case 0x0A:
+          //movz
+          return data.rt ? data.rd : data.rs;
+        case 0x2A:
+          //slt
+          return data.rs < data.rt;
+        case 0x2B:
+          //sltu
+          return (unsigned int) data.rs < (unsigned int) data.rt;
+        case 0x00:
+          //sll
+          return data.rt << instruction.shamt;
+        case 0x02:
+          //srl
+          return (long) (((unsigned int) data.rt) >> instruction.shamt);
+        case 0x22:
+          //sub
+          return data.rs - data.rt;
+        case 0x23:
+          //subu
+          return (unsigned int) data.rs - (unsigned int) data.rt;
+        case 0x26:
+          //xor
+          return data.rs ^ data.rt;
+      }
+      break;
+  }
+
+  printf("Opcode %02x | Function %02x not implemented\n", op, funct);
   return 0;
 }
