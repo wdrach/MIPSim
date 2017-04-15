@@ -4,6 +4,11 @@ int memory[MEMSIZE] = {0};
 int mem_start = 0;
 int registers[32] = {0};
 int pc = 1;
+
+//for delayed branch
+bool branch_taken = false;
+int new_pc = 0;
+
 unsigned long clock_cycles = 0;
 
 //bools for stalling
@@ -107,7 +112,15 @@ bool clock() {
 
   hazard_detection();
 
+
+  if (branch_taken) {
+    pc = new_pc;
+    branch_taken = false;
+  }
+
   clock_cycles++;
+
+  //printf("pc: %d\n", pc);
 
   if (pc <= 1) return false;
   return true;
@@ -135,12 +148,12 @@ void hazard_detection() {
   if (EXMEM.reg_write && EXMEM.instruction.dest != 0) {
     bool ret = false;
 
-    if (EXMEM.instruction.rd == IDEX.instruction.rs) {
+    if (EXMEM.instruction.dest == IDEX.instruction.rs) {
       IDEX.data.rs = EXMEM.data.ALU_result;
       ret = true;
     }
 
-    if (EXMEM.instruction.rd == IDEX.instruction.rt) {
+    if (EXMEM.instruction.dest == IDEX.instruction.rt) {
       IDEX.data.rt = EXMEM.data.ALU_result;
       ret = true;
     }
@@ -150,11 +163,11 @@ void hazard_detection() {
   }
 
   if (MEMWB.reg_write && MEMWB.instruction.dest != 0) {
-    if (MEMWB.instruction.rd == IDEX.instruction.rs) {
+    if (MEMWB.instruction.dest == IDEX.instruction.rs) {
       IDEX.data.rs = MEMWB.data.ALU_result;
     }
 
-    if (MEMWB.instruction.rd == IDEX.instruction.rt) {
+    if (MEMWB.instruction.dest == IDEX.instruction.rt) {
       IDEX.data.rt = MEMWB.data.ALU_result;
     }
   }
@@ -162,10 +175,10 @@ void hazard_detection() {
 
 void IF() {
   if (stall_IF) return;
+  IFID = empty_IFID;
 
   //TODO: check this, should this be before the stall? If so, fix
   //      all of these statements
-  IFID = empty_IFID;
 
   IFID.pc = pc;
   IFID.instruction = memory[pc];
@@ -176,14 +189,14 @@ void IF() {
 }
 
 void branch(int addr) {
-  pc = (addr - mem_start)/4;
+  branch_taken = true;
+  new_pc = (addr - mem_start)/4;
 
   //TODO: do we have to clear any stages? I don't think so
 }
 
 void ID() {
   if (stall_ID) return;
-
   IDEX = empty_IDEX;
 
   //simple copies
@@ -239,14 +252,14 @@ void ID() {
     switch (opcode) {
       case 0x02:
         //j
-        return branch((pc & 0xFC000000) | (IDEX.data.immediate << 2));
+        return branch((IFID.pc & 0xF0000000) | (IDEX.data.immediate << 2));
       case 0x03:
         //jal
 
         //link
         registers[RA] = IDEX.new_pc + 4;
         //jump!
-        return branch((pc & 0xFC000000) | (IDEX.data.immediate << 2));
+        return branch((IFID.pc & 0xF0000000) | (IDEX.data.immediate << 2));
     }
   }
   else {
@@ -323,7 +336,6 @@ void ID() {
 
 void EX() {
   if (stall_EX) return;
-
   EXMEM = empty_EXMEM;
 
   //simple copies
@@ -343,7 +355,6 @@ void EX() {
 
 void MEM() {
   if (stall_MEM) return;
-
   MEMWB = empty_MEMWB;
 
   //simple copies
