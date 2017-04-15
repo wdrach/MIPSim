@@ -139,7 +139,7 @@ void ID() {
 
   IDEX = empty_IDEX;
 
-  //simple forwarding
+  //simple copies
   IDEX.pc = IFID.pc;
   IDEX.new_pc = IFID.new_pc;
 
@@ -241,8 +241,10 @@ void EX() {
   //simple copies
   EXMEM.pc = IDEX.pc;
   EXMEM.new_pc = IDEX.new_pc;
+
   EXMEM.data = IDEX.data;
   EXMEM.instruction = IDEX.instruction;
+
   EXMEM.mem_read = IDEX.mem_read;
   EXMEM.mem_write = IDEX.mem_write;
   EXMEM.branch = IDEX.branch;
@@ -258,7 +260,6 @@ void MEM() {
   MEMWB = empty_MEMWB;
 
   //simple copies
-  //TODO: check all of these simple copies
   MEMWB.pc = EXMEM.pc;
   MEMWB.data = EXMEM.data;
   MEMWB.instruction = EXMEM.instruction;
@@ -266,8 +267,6 @@ void MEM() {
   MEMWB.mem_to_reg = EXMEM.mem_to_reg;
 
   int opcode = EXMEM.instruction.opcode;
-
-  //TODO: double check endianness
 
   //load instructions
   if (EXMEM.mem_read) {
@@ -299,7 +298,6 @@ void MEM() {
         }
 
         //sign extend
-        //TODO: check this
         if (opcode == 0x20) {
           data = (int) ((char) data);
         }

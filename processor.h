@@ -52,8 +52,8 @@ typedef struct IDEXregister {
   int pc;
   int new_pc;
 
-  inst instruction;
   read_data data;
+  inst instruction;
 
   bool mem_read;
   bool mem_write;
