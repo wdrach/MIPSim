@@ -57,7 +57,6 @@ typedef struct IDEXregister {
 
   bool mem_read;
   bool mem_write;
-  bool branch;
   bool reg_write;
   bool mem_to_reg;
 } IDEXreg;
@@ -75,7 +74,6 @@ typedef struct EXMEMregister {
 
   bool mem_read;
   bool mem_write;
-  bool branch;
   bool reg_write;
   bool mem_to_reg;
 } EXMEMreg;

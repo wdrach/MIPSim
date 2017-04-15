@@ -64,7 +64,6 @@ void init(char* filename) {
   empty_IDEX.data = empty_data;
   empty_IDEX.mem_read = false;
   empty_IDEX.mem_write = false;
-  empty_IDEX.branch = false;
   empty_IDEX.reg_write = false;
   empty_IDEX.mem_to_reg = false;
 
@@ -74,7 +73,6 @@ void init(char* filename) {
   empty_EXMEM.instruction = empty_inst;
   empty_EXMEM.mem_read = false;
   empty_EXMEM.mem_write = false;
-  empty_EXMEM.branch = false;
   empty_EXMEM.reg_write = false;
   empty_EXMEM.mem_to_reg = false;
 
@@ -116,7 +114,50 @@ bool clock() {
 }
 
 void hazard_detection() {
-  //TODO: implement this
+  //All based off of lecture 17
+
+  //TODO: check the stall and the return
+  if (IDEX.mem_read) {
+    int IFID_rs = (IFID.instruction&0x03E00000)>>21;
+    int IFID_rt = (IFID.instruction&0x001F0000)>>16;
+
+    if (IDEX.instruction.rt == IFID_rs ||
+        IDEX.instruction.rt == IFID_rt) {
+      stall_IF = true;
+      stall_ID = true;
+      IDEX = empty_IDEX;
+
+      return;
+    }
+  }
+
+  //TODO: double check the forwarding itself
+  if (EXMEM.reg_write && EXMEM.instruction.dest != 0) {
+    bool ret = false;
+
+    if (EXMEM.instruction.rd == IDEX.instruction.rs) {
+      IDEX.data.rs = EXMEM.data.ALU_result;
+      ret = true;
+    }
+
+    if (EXMEM.instruction.rd == IDEX.instruction.rt) {
+      IDEX.data.rt = EXMEM.data.ALU_result;
+      ret = true;
+    }
+
+    //if we forward from EX, don't forward from MEM
+    if (ret) return;
+  }
+
+  if (MEMWB.reg_write && MEMWB.instruction.dest != 0) {
+    if (MEMWB.instruction.rd == IDEX.instruction.rs) {
+      IDEX.data.rs = MEMWB.data.ALU_result;
+    }
+
+    if (MEMWB.instruction.rd == IDEX.instruction.rt) {
+      IDEX.data.rt = MEMWB.data.ALU_result;
+    }
+  }
 }
 
 void IF() {
@@ -132,6 +173,12 @@ void IF() {
   //increment PC
   pc++;
   IFID.new_pc = pc;
+}
+
+void branch(int addr) {
+  pc = (addr - mem_start)/4;
+
+  //TODO: do we have to clear any stages? I don't think so
 }
 
 void ID() {
@@ -176,7 +223,7 @@ void ID() {
     //set the control booleans
     if (funct == 0x08) {
       //jr instruction
-      IDEX.branch = true;
+      return branch(IDEX.data.rs);
     }
     else {
       //all of the arithmetic ops
@@ -189,8 +236,18 @@ void ID() {
 
     IDEX.data.immediate = IDEX.instruction.immediate;
 
-    //set the control booleans
-    IDEX.branch = true;
+    switch (opcode) {
+      case 0x02:
+        //j
+        return branch((pc & 0xFC000000) | IDEX.data.immediate);
+      case 0x03:
+        //jal
+
+        //link
+        registers[RA] = IDEX.new_pc + 4;
+        //jump!
+        return branch((pc & 0xFC000000) | IDEX.data.immediate);
+    }
   }
   else {
     //I instructions
@@ -213,7 +270,38 @@ void ID() {
     }
     else if ((opcode >= 0x04 && opcode <= 0x07) || opcode == 0x01) {
       //Branch operations
-      IDEX.branch = true;
+      switch (opcode) {
+        case 0x04:
+          //beq
+          if (IDEX.data.rs == IDEX.data.rt) {
+            return branch(IDEX.new_pc + (IDEX.data.immediate << 2));
+          }
+          break;
+        case 0x05:
+          //bne
+          if (IDEX.data.rs != IDEX.data.rt) {
+            return branch(IDEX.new_pc + (IDEX.data.immediate << 2));
+          }
+          break;
+        case 0x07:
+          //bgtz
+          if (IDEX.data.rs > 0) {
+            return branch(IDEX.new_pc + (IDEX.data.immediate << 2));
+          }
+          break;
+        case 0x01:
+          //bltz
+          if (IDEX.data.rs < 0) {
+            return branch(IDEX.new_pc + (IDEX.data.immediate << 2));
+          }
+          break;
+        case 0x06:
+          //blez
+          if (IDEX.data.rs <= 0) {
+            return branch(IDEX.new_pc + (IDEX.data.immediate << 2));
+          }
+          break;
+      }
     }
     else if ((opcode >= 0x23 && opcode <= 0x25) || opcode == 0x20) {
       //Load operations
@@ -247,7 +335,6 @@ void EX() {
 
   EXMEM.mem_read = IDEX.mem_read;
   EXMEM.mem_write = IDEX.mem_write;
-  EXMEM.branch = IDEX.branch;
   EXMEM.reg_write = IDEX.reg_write;
   EXMEM.mem_to_reg = IDEX.mem_to_reg;
 
@@ -400,7 +487,6 @@ int ALU(read_data data, inst instruction) {
     //-------
     case 0x02:
     case 0x03:
-      printf("Jump got to EX stage, make sure they are implemented properly\n");
       return 0;
 
     //------------
@@ -463,7 +549,6 @@ int ALU(read_data data, inst instruction) {
           return data.rs & data.rt;
         case 0x08:
           //jr
-          printf("Jump got to EX stage, make sure they are implemented properly\n");
           return 0;
         case 0x27:
           //nor
