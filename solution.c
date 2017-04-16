@@ -1,12 +1,17 @@
 #include <stdio.h>
 #include "processor.h"
 
-int main() {
-  init("./examples/Program2File.txt");
+int main(int argc, char* argv[]) {
+  if (argc != 2) {
+    printf("USAGE: ./run_sim <program_location>\n");
+    return 0;
+  }
+  init(argv[1]);
+
   while(clock())
     ;
 
-    printf("Results:\nmem[2]: %d\nmem[6]: %d\nmem[7]: %d\nmem[8]: %d\nmem[9]: %d\n", memory[2], memory[6], memory[7], memory[8], memory[9]);
+  printf("Simulation Results:\n\nReserved Memory:\n Location | Val (hex) | Val (dec) \n        6 |  %08x | %d\n        7 |  %08x | %d\n        8 |  %08x | %d\n        9 |  %08x | %d\n", memory[6], memory[6], memory[7], memory[7], memory[8], memory[8], memory[9], memory[9]);
 
-  printf("Simulation results:\nTotal Clock Cycles: %lu\n", clock_cycles);
+  printf("\nTotal Clock Cycles: %lu\n", clock_cycles);
 }
