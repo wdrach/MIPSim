@@ -2,7 +2,7 @@
 #include "processor.h"
 
 int main() {
-  init("./examples/Program1File.txt");
+  init("./examples/ExampleProgramFileUnOptimized.txt");
   while(clock())
     ;
 

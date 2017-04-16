@@ -143,7 +143,8 @@ void hazard_detection() {
       ret = true;
     }
 
-    if (EXMEM.instruction.dest == IDEX.instruction.rt) {
+    if (EXMEM.instruction.dest == IDEX.instruction.rt &&
+        IDEX.instruction.rt != IDEX.instruction.dest) {
       IDEX.data.rt = EXMEM.data.ALU_result;
       ret = true;
     }
@@ -154,11 +155,12 @@ void hazard_detection() {
 
   if (MEMWB.reg_write && MEMWB.instruction.dest != 0) {
     if (MEMWB.instruction.dest == IDEX.instruction.rs) {
-      IDEX.data.rs = MEMWB.data.ALU_result;
+      IDEX.data.rs = MEMWB.mem_to_reg ? MEMWB.data.mem : MEMWB.data.ALU_result;
     }
 
-    if (MEMWB.instruction.dest == IDEX.instruction.rt) {
-      IDEX.data.rt = MEMWB.data.ALU_result;
+    if (MEMWB.instruction.dest == IDEX.instruction.rt &&
+        IDEX.instruction.rt != IDEX.instruction.dest) {
+      IDEX.data.rt = MEMWB.mem_to_reg ? MEMWB.data.mem : MEMWB.data.ALU_result;
     }
   }
 }
@@ -166,9 +168,6 @@ void hazard_detection() {
 void IF() {
   if (stall) return;
   IFID = empty_IFID;
-
-  //TODO: check this, should this be before the stall? If so, fix
-  //      all of these statements
 
   IFID.pc = pc;
   IFID.instruction = memory[pc];
@@ -320,6 +319,7 @@ void ID() {
     }
     else if ((opcode >= 0x23 && opcode <= 0x25) || opcode == 0x20) {
       //Load operations
+      IDEX.reg_write = true;
       IDEX.mem_read = true;
       IDEX.mem_to_reg = true;
 
