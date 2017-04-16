@@ -143,8 +143,7 @@ void hazard_detection() {
       ret = true;
     }
 
-    if (EXMEM.instruction.dest == IDEX.instruction.rt &&
-        IDEX.instruction.rt != IDEX.instruction.dest) {
+    if (EXMEM.instruction.dest == IDEX.instruction.rt) {
       IDEX.data.rt = EXMEM.data.ALU_result;
       ret = true;
     }
@@ -158,8 +157,7 @@ void hazard_detection() {
       IDEX.data.rs = MEMWB.mem_to_reg ? MEMWB.data.mem : MEMWB.data.ALU_result;
     }
 
-    if (MEMWB.instruction.dest == IDEX.instruction.rt &&
-        IDEX.instruction.rt != IDEX.instruction.dest) {
+    if (MEMWB.instruction.dest == IDEX.instruction.rt) {
       IDEX.data.rt = MEMWB.mem_to_reg ? MEMWB.data.mem : MEMWB.data.ALU_result;
     }
   }
@@ -368,6 +366,7 @@ void MEM() {
     int addr = EXMEM.data.ALU_result;
 
     int full_word = memory[(addr - mem_start)/4];
+    //printf("%d: reading %d from %d\n", EXMEM.pc, full_word, addr);
 
     //temp variable for signed halfwords
     int data = 0;
@@ -422,6 +421,7 @@ void MEM() {
   if (EXMEM.mem_write) {
     int addr = EXMEM.data.ALU_result;
     int word_addr = (addr-mem_start)/4;
+    //printf("%d: writing %d to %d\n", EXMEM.pc, EXMEM.data.rt, addr);
 
     switch (opcode) {
       case 0x28:
