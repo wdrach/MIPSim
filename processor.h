@@ -22,100 +22,92 @@ typedef struct deconstructed_instruction {
   int shamt;
   int funct;
   int immediate;
+  int dest;
 } inst;
 
 inst empty_inst;
+
+typedef struct data_registers {
+  int mem;
+  int rs;
+  int rt;
+  int rd;
+  int immediate;
+  int ALU_result;
+} read_data;
+
+read_data empty_data;
 
 typedef struct IFIDregister {
   int pc;
   int new_pc;
   int instruction;
-} IFID;
+} IFIDreg;
 
 //IFID registers for the output of the IF stage
-IFID IFo;
-//and the input of the ID stage
-IFID IDi;
-//and an empty struct
-IFID emptyIFID;
+IFIDreg empty_IFID;
+IFIDreg IFID;
 
 typedef struct IDEXregister {
   int pc;
   int new_pc;
-  inst instruction;
-  int vala;
-  int valb;
-  bool memRead;
-  bool memWrite;
-  bool branch;
-  bool RegWrite;
-  bool memToReg;
-  int dest;
 
-  //not sure about these
-  bool regDst;
-  bool ALUOp;
-  bool ALUSrc;
-} IDEX;
+  read_data data;
+  inst instruction;
+
+  bool mem_read;
+  bool mem_write;
+  bool reg_write;
+  bool mem_to_reg;
+} IDEXreg;
 
 //Same deal as with IFID, but now with IDEX
-IDEX IDo;
-IDEX EXi;
-IDEX emptyIDEX;
+IDEXreg empty_IDEX;
+IDEXreg IDEX;
 
 typedef struct EXMEMregister {
   int pc;
   int new_pc;
-  int ALU_result;
-  int valb;
-  int dest;
+
+  read_data data;
   inst instruction;
 
-  bool memRead;
-  bool memWrite;
-  bool RegWrite;
-  bool memToReg;
-} EXMEM;
+  bool mem_read;
+  bool mem_write;
+  bool reg_write;
+  bool mem_to_reg;
+} EXMEMreg;
 
 //and again!
-EXMEM EXo;
-EXMEM MEMi;
-EXMEM emptyEXMEM;
+EXMEMreg empty_EXMEM;
+EXMEMreg EXMEM;
 
 typedef struct MEMWBregister {
   int pc;
-  int data;
-  int ALU_result;
-  int dest;
+
+  read_data data;
   inst instruction;
 
-  bool RegWrite;
-  bool memToReg;
-} MEMWB;
+  bool reg_write;
+  bool mem_to_reg;
+} MEMWBreg;
 
 //AND ANOTHER ONE
-MEMWB MEMo;
-MEMWB WBi;
-MEMWB emptyMEMWB;
+MEMWBreg empty_MEMWB;
+MEMWBreg MEMWB;
 
-long ALU(int vala, int valb, int valc, inst instruction);
+int ALU(read_data data, inst instruction);
 
-void init();
+void init(char* filename);
 
-void read_file(char* filename);
-
-void print_registers();
+void hazard_detection();
 
 bool clock();
-
-bool step();
 
 void IF();
 void ID();
 void EX();
 void MEM();
 void WB();
-
-void hazard_detection();
 
 #endif

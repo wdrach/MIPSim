@@ -2,11 +2,11 @@
 #include "processor.h"
 
 int main() {
-  read_file("./examples/Program1File.txt");
-  init();
-  while(clock());
+  init("./examples/Program2File.txt");
+  while(clock())
+    ;
 
-    printf("Results:\nmem[6]: %d\nmem[7]: %d\nmem[8]: %d\nmem[9]: %d\n", memory[6], memory[7], memory[8], memory[9]);
+    printf("Results:\nmem[2]: %d\nmem[6]: %d\nmem[7]: %d\nmem[8]: %d\nmem[9]: %d\n", memory[2], memory[6], memory[7], memory[8], memory[9]);
 
   printf("Simulation results:\nTotal Clock Cycles: %lu\n", clock_cycles);
 }
