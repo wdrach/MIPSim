@@ -115,8 +115,37 @@ bool clock() {
 
   //printf("pc: %d\n", pc);
 
-  if (pc <= 1) return false;
+  if (pc <= 0) return false;
   return true;
+}
+
+void forward() {
+  //this is split out because branch instructions run this in the
+  //ID stage seperate from the hazard detection
+  bool got_rt = false;
+  bool got_rs = false;
+
+  if (EXMEM.reg_write && EXMEM.instruction.dest != 0) {
+    if (EXMEM.instruction.dest == IDEX.instruction.rs) {
+      IDEX.data.rs = EXMEM.data.ALU_result;
+      got_rs = true;
+    }
+
+    if (EXMEM.instruction.dest == IDEX.instruction.rt) {
+      IDEX.data.rt = EXMEM.data.ALU_result;
+      got_rt = true;
+    }
+  }
+
+  if (MEMWB.reg_write && MEMWB.instruction.dest != 0) {
+    if (MEMWB.instruction.dest == IDEX.instruction.rs && !got_rs) {
+      IDEX.data.rs = MEMWB.mem_to_reg ? MEMWB.data.mem : MEMWB.data.ALU_result;
+    }
+
+    if (MEMWB.instruction.dest == IDEX.instruction.rt && !got_rt) {
+      IDEX.data.rt = MEMWB.mem_to_reg ? MEMWB.data.mem : MEMWB.data.ALU_result;
+    }
+  }
 }
 
 void hazard_detection() {
@@ -132,32 +161,7 @@ void hazard_detection() {
     }
   }
 
-  if (EXMEM.reg_write && EXMEM.instruction.dest != 0) {
-    bool ret = false;
-
-    if (EXMEM.instruction.dest == IDEX.instruction.rs) {
-      IDEX.data.rs = EXMEM.data.ALU_result;
-      ret = true;
-    }
-
-    if (EXMEM.instruction.dest == IDEX.instruction.rt) {
-      IDEX.data.rt = EXMEM.data.ALU_result;
-      ret = true;
-    }
-
-    //if we forward from EX, don't forward from MEM
-    if (ret) return;
-  }
-
-  if (MEMWB.reg_write && MEMWB.instruction.dest != 0) {
-    if (MEMWB.instruction.dest == IDEX.instruction.rs) {
-      IDEX.data.rs = MEMWB.mem_to_reg ? MEMWB.data.mem : MEMWB.data.ALU_result;
-    }
-
-    if (MEMWB.instruction.dest == IDEX.instruction.rt) {
-      IDEX.data.rt = MEMWB.mem_to_reg ? MEMWB.data.mem : MEMWB.data.ALU_result;
-    }
-  }
+  forward();
 }
 
 void IF() {
@@ -175,7 +179,7 @@ void IF() {
 void branch(int addr) {
   branch_taken = true;
   new_pc = (addr - mem_start)/4;
-  //printf("branch from %d to %d\n", IDEX.pc, new_pc);
+  printf("branch from %d to %d\n", IDEX.pc, new_pc);
 }
 
 void ID() {
@@ -269,13 +273,10 @@ void ID() {
       //Branch operations
       int new_addr = (IDEX.new_pc*4) + mem_start + (IDEX.data.immediate << 2);
 
-      //a new forwarding condition just for branches
-      if (EXMEM.instruction.dest == IDEX.instruction.rt) {
-        IDEX.data.rt = EXMEM.data.ALU_result;
-      }
-      if (EXMEM.instruction.dest == IDEX.instruction.rs) {
-        IDEX.data.rs = EXMEM.data.ALU_result;
-      }
+
+      //branch instructions need forwarding to the ID stage, so
+      //make sure we do that
+      forward();
 
       switch (opcode) {
         case 0x04:
