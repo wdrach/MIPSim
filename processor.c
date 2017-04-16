@@ -179,7 +179,7 @@ void IF() {
 void branch(int addr) {
   branch_taken = true;
   new_pc = (addr - mem_start)/4;
-  printf("branch from %d to %d\n", IDEX.pc, new_pc);
+  //printf("branch from %d to %d\n", IDEX.pc, new_pc);
 }
 
 void ID() {
@@ -425,15 +425,15 @@ void MEM() {
         switch (addr%4) {
           case 0:
             memory[word_addr] &= 0x00FFFFFFF;
-            memory[word_addr] |= EXMEM.data.rt << 24;
+            memory[word_addr] |= (EXMEM.data.rt & 0xFF) << 24;
             break;
           case 1:
             memory[word_addr] &= 0xFF00FFFF;
-            memory[word_addr] |= (EXMEM.data.rt & 0xFF0000) << 16;
+            memory[word_addr] |= (EXMEM.data.rt & 0xFF) << 16;
             break;
           case 2:
             memory[word_addr] &= 0xFFFF00FF;
-            memory[word_addr] |= (EXMEM.data.rt & 0xFF00) << 8;
+            memory[word_addr] |= (EXMEM.data.rt & 0xFF) << 8;
             break;
           case 3:
             memory[word_addr] &= 0xFFFFFF00;
