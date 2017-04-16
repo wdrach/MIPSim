@@ -122,7 +122,6 @@ bool clock() {
 void hazard_detection() {
   //All based off of lecture 17
 
-  //TODO: check the stall and the return
   if (IDEX.mem_read) {
     int IFID_rs = (IFID.instruction&0x03E00000)>>21;
     int IFID_rt = (IFID.instruction&0x001F0000)>>16;
@@ -130,11 +129,9 @@ void hazard_detection() {
     if (IDEX.instruction.rt == IFID_rs ||
         IDEX.instruction.rt == IFID_rt) {
       stall = true;
-      return;
     }
   }
 
-  //TODO: double check the forwarding itself
   if (EXMEM.reg_write && EXMEM.instruction.dest != 0) {
     bool ret = false;
 
@@ -179,8 +176,6 @@ void branch(int addr) {
   branch_taken = true;
   new_pc = (addr - mem_start)/4;
   //printf("branch from %d to %d\n", IDEX.pc, new_pc);
-
-  //TODO: do we have to clear any stages? I don't think so
 }
 
 void ID() {
