@@ -1,6 +1,137 @@
 #include "processor.h"
-
+//memory stuff
 int memory[MEMSIZE] = {0};
+
+int dcache_size = 0;
+int icache_size = 0;
+
+int dcache_nblocks = 0;
+int icache_nblocks = 0;
+int dcache_tags[128] = {0};
+int icache_tags[64] = {0};
+
+bool write_through = false;
+bool dcache_dirty[128] = {0};
+bool icache_dirty[64] = {0};
+
+unsigned long icache_avail[64] = {0};
+unsigned long dcache_avail[128] = {0};
+
+void init_cache(int i_size, int d_size, int i_nblocks, int d_nblocks, bool WT) {
+  write_through = WT;
+  dcache_size = d_size;
+  icache_size = i_size;
+  dcache_nblocks = d_nblocks;
+  icache_nblocks = i_nblocks;
+
+  //clear main memory
+  int i;
+  for (i=0; i<MEMSIZE; i++) memory[i] = 0;
+}
+
+void clear_cache() {
+  if (!write_through) {
+    //TODO: write everything that is dirty to memory
+  }
+
+  int i, j;
+  for (i=0; i<128; i++) {
+    if (i<64) {
+      icache_tags[i] = 0;
+      icache_dirty[i] = false;
+      icache_avail[i] = 0;
+    }
+
+    dcache_tags[i] = 0;
+    dcache_dirty[i] = false;
+    dcache_avail[i] = 0;
+  }
+
+  icache_size = 0;
+  dcache_size = 0;
+  icache_nblocks = 0;
+  dcache_nblocks = 0;
+
+  write_through = false;
+}
+
+//TODO: add write back to this
+int read_i(int addr, int* stall_cycles, unsigned long current_cycle) {
+  // tag | block number | block index
+  int tag = addr&(~icache_size);
+  int bucket = addr%icache_size - addr%icache_nblocks;
+
+  if (icache_tags[bucket] == (tag | 0x80000000)) {
+    //hit
+    unsigned long avail = icache_avail[addr%icache_size];
+    if (avail <= current_cycle) 
+      *stall_cycles = 0;
+    else
+      *stall_cycles = avail - current_cycle;
+  }
+  else {
+    //flush
+    icache_tags[bucket] = tag | 0x80000000;
+    *stall_cycles = 8 + 2*(addr%icache_nblocks);
+
+    int i;
+    for (i=0; i<icache_nblocks; i++) {
+      icache_avail[bucket + i] = 8 + 2*i;
+    }
+  }
+
+  return memory[addr];
+}
+
+//TODO: add write back to this
+int read_d(int addr, int* stall_cycles, unsigned long current_cycle) {
+  // tag | block number | block index
+  int tag = addr&(~dcache_size);
+  int bucket = addr%dcache_size - addr%dcache_nblocks;
+
+  if (dcache_tags[bucket] == (tag | 0x80000000)) {
+    //hit
+    unsigned long avail = dcache_avail[addr%dcache_size];
+    if (avail <= current_cycle) 
+      *stall_cycles = 0;
+    else
+      *stall_cycles = avail - current_cycle;
+  }
+  else {
+    //flush
+    dcache_tags[bucket] = tag | 0x80000000;
+    *stall_cycles = 8 + 2*(addr%dcache_nblocks);
+
+    int i;
+    for (i=0; i<dcache_nblocks; i++) {
+      dcache_avail[bucket + i] = 8 + 2*i;
+    }
+  }
+
+  return memory[addr];
+}
+
+int read_memory(int addr) {
+  return memory[addr];
+}
+
+void write_i(int addr, int block) {
+  //TODO: write to cache and/or main memory based on
+  //      write_through flag
+  memory[addr] = block;
+}
+
+void write_d(int addr, int block) {
+  //TODO: write to cache and/or main memory based on
+  //      write_through flag
+  memory[addr] = block;
+}
+
+void write_memory(int addr, int block) {
+  memory[addr] = block;
+}
+
+//processor stuff
 int mem_start = 0;
 int registers[32] = {0};
 int pc = 1;
@@ -15,6 +146,9 @@ unsigned long clock_cycles = 0;
 bool stall = false;
 
 void init(char* filename) {
+  //initialize the cache
+  init_cache(64, 128, 4, 4, true);
+
   FILE* fp = fopen(filename, "r");
   char buf[100];
   char* temp;
@@ -23,20 +157,20 @@ void init(char* filename) {
   fgets(buf, 100, fp);
   temp = strtok(buf, ", ");
   int instruction = strtol(temp, NULL, 16);
-  memory[0] = instruction;
+  write_memory(0, instruction);
 
   int i = 1;
   while(fgets(buf, 100, fp) != NULL) {
     temp = strtok(buf, ",");
     instruction = strtol(temp, NULL, 16);
-    memory[i] = instruction;
+    write_memory(i, instruction);
     i++;
   }
 
   //set SP, FP, pc
-  registers[SP] = memory[0];
-  registers[FP] = memory[1];
-  pc = memory[5];
+  registers[SP] = read_memory(0);
+  registers[FP] = read_memory(1);
+  pc = read_memory(5);
 
   //Build empty structures and zero out everything
   empty_inst.opcode = 0;
@@ -88,6 +222,7 @@ void init(char* filename) {
   IDEX = empty_IDEX;
   EXMEM = empty_EXMEM;
   MEMWB = empty_MEMWB;
+
 }
 
 bool clock() {
@@ -115,7 +250,12 @@ bool clock() {
 
   //printf("pc: %d\n", pc);
 
-  if (pc <= 0) return false;
+  if (pc <= 0) {
+    printf("Simulation Results:\n\nReserved Memory:\n Location | Val (hex) | Val (dec) \n        6 |  %08x | %d\n        7 |  %08x | %d\n        8 |  %08x | %d\n        9 |  %08x | %d\n", read_memory(6), read_memory(6), read_memory(7), read_memory(7), read_memory(8), read_memory(8), read_memory(9), read_memory(9));
+
+    printf("\nTotal Clock Cycles: %lu\n", clock_cycles);
+    return false;
+  }
   return true;
 }
 
@@ -169,7 +309,9 @@ void IF() {
   IFID = empty_IFID;
 
   IFID.pc = pc;
-  IFID.instruction = memory[pc];
+
+  int stall_cycles = 0;
+  IFID.instruction = read_i(pc, &stall_cycles, clock_cycles);
 
   //increment PC
   pc++;
@@ -361,7 +503,8 @@ void MEM() {
   if (EXMEM.mem_read) {
     int addr = EXMEM.data.ALU_result;
 
-    int full_word = memory[(addr - mem_start)/4];
+    int stall_cycles = 0;
+    int full_word = read_d((addr - mem_start)/4, &stall_cycles, clock_cycles);
     //printf("%d: reading %d from %d\n", EXMEM.pc, full_word, addr);
 
     //temp variable for signed halfwords
@@ -417,46 +560,52 @@ void MEM() {
   if (EXMEM.mem_write) {
     int addr = EXMEM.data.ALU_result;
     int word_addr = (addr-mem_start)/4;
+    int data = 0;
+    int stall_cycles = 0;
     //printf("%d: writing %d to %d\n", EXMEM.pc, EXMEM.data.rt, addr);
 
     switch (opcode) {
       case 0x28:
         //sb
+        data = read_memory(word_addr);
         switch (addr%4) {
           case 0:
-            memory[word_addr] &= 0x00FFFFFFF;
-            memory[word_addr] |= (EXMEM.data.rt & 0xFF) << 24;
+            data &= 0x00FFFFFFF;
+            data |= (EXMEM.data.rt & 0xFF) << 24;
             break;
           case 1:
-            memory[word_addr] &= 0xFF00FFFF;
-            memory[word_addr] |= (EXMEM.data.rt & 0xFF) << 16;
+            data &= 0xFF00FFFF;
+            data |= (EXMEM.data.rt & 0xFF) << 16;
             break;
           case 2:
-            memory[word_addr] &= 0xFFFF00FF;
-            memory[word_addr] |= (EXMEM.data.rt & 0xFF) << 8;
+            data &= 0xFFFF00FF;
+            data |= (EXMEM.data.rt & 0xFF) << 8;
             break;
           case 3:
-            memory[word_addr] &= 0xFFFFFF00;
-            memory[word_addr] |= EXMEM.data.rt & 0xFF;
+            data &= 0xFFFFFF00;
+            data |= EXMEM.data.rt & 0xFF;
             break;
         }
+        write_d(word_addr, data);
         break;
       case 0x29:
         //sh
+        data = read_memory(word_addr);
         switch (addr%2) {
           case 0:
-            memory[word_addr] &= 0x0000FFFF;
-            memory[word_addr] |= EXMEM.data.rt << 16;
+            data &= 0x0000FFFF;
+            data |= EXMEM.data.rt << 16;
             break;
           case 1:
-            memory[word_addr] &= 0xFFFF0000;
-            memory[word_addr] |= EXMEM.data.rt & 0xFFFF;
+            data &= 0xFFFF0000;
+            data |= EXMEM.data.rt & 0xFFFF;
             break;
         }
+        write_d(word_addr, data);
         break;
       case 0x2B:
         //sw
-        memory[word_addr] = EXMEM.data.rt;
+        write_d(word_addr, EXMEM.data.rt);
         break;
     }
   }
@@ -592,3 +741,4 @@ int ALU(read_data data, inst instruction) {
   printf("Opcode %02x | Function %02x not implemented\n", op, funct);
   return 0;
 }
+

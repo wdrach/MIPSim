@@ -11,7 +11,6 @@
 #define FP 30
 #define RA 31
 
-int memory[MEMSIZE];
 unsigned long clock_cycles;
 
 typedef struct deconstructed_instruction {
