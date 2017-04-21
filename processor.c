@@ -13,9 +13,14 @@ int icache_tags[64] = {0};
 bool write_through = false;
 bool dcache_dirty[256] = {0};
 
-
 unsigned long icache_avail[64] = {0};
 unsigned long dcache_avail[256] = {0};
+unsigned long write_buffer_avail = 0;
+
+unsigned int icache_hit = 0;
+unsigned int dcache_hit = 0;
+unsigned int icache_miss = 0;
+unsigned int dcache_miss = 0;
 
 void init_cache(int i_size, int d_size, int i_nblocks, int d_nblocks, bool WT) {
   write_through = WT;
@@ -56,10 +61,12 @@ void clear_cache() {
 
 int read_i(int addr, int* stall_cycles, unsigned long current_cycle) {
   // tag | block number | block index
+  //this tag includes 0 padding, basically just anding out lower bits
   int tag = addr&(~icache_size);
   int bucket = addr%icache_size - addr%icache_nblocks;
 
   if (icache_tags[bucket] == (tag | 0x80000000)) {
+    icache_hit++;
     //hit
     unsigned long avail = icache_avail[addr%icache_size];
     if (avail <= current_cycle) 
@@ -68,6 +75,7 @@ int read_i(int addr, int* stall_cycles, unsigned long current_cycle) {
       *stall_cycles = avail - current_cycle;
   }
   else {
+    icache_miss++;
     //flush
     icache_tags[bucket] = tag | 0x80000000;
     *stall_cycles = 8 + 2*(addr%icache_nblocks);
@@ -87,6 +95,7 @@ int read_d(int addr, int* stall_cycles, unsigned long current_cycle) {
   int bucket = addr%dcache_size - addr%dcache_nblocks;
 
   if (dcache_tags[bucket] == (tag | 0x80000000)) {
+    dcache_hit++;
     //hit
     unsigned long avail = dcache_avail[addr%dcache_size];
     if (avail <= current_cycle) 
@@ -95,6 +104,7 @@ int read_d(int addr, int* stall_cycles, unsigned long current_cycle) {
       *stall_cycles = avail - current_cycle;
   }
   else {
+    dcache_miss++;
     //flush
     dcache_tags[bucket] = tag | 0x80000000;
     *stall_cycles = 8 + 2*(addr%dcache_nblocks);
@@ -109,7 +119,13 @@ int read_d(int addr, int* stall_cycles, unsigned long current_cycle) {
       dcache_dirty[bucket + i] = false;
     }
 
-    *stall_cycles += write_stall_cycles;
+    if (write_buffer_avail < current_cycle) {
+      write_buffer_avail = current_cycle + 14 + write_stall_cycles;
+    }
+    else {
+      *stall_cycles += write_buffer_avail - current_cycle;
+      write_buffer_avail += write_stall_cycles + 14;
+    }
   }
 
   return memory[addr];
@@ -119,13 +135,22 @@ int read_memory(int addr) {
   return memory[addr];
 }
 
-void write_d(int addr, int block, int* stall_cycles) {
+void write_d(int addr, int block, int* stall_cycles, int current_cycle) {
   if (write_through) {
-    *stall_cycles = 4 + (addr%dcache_nblocks);
+    if (write_buffer_avail < current_cycle) {
+      write_buffer_avail = current_cycle + 4 + (addr%dcache_nblocks);
+      *stall_cycles = 0;
+    }
+    else {
+      write_buffer_avail += 4 + (addr%dcache_nblocks);
+      *stall_cycles = current_cycle - write_buffer_avail;
+    }
   }
   else {
+    int read_stall_cycles = 0;
+    read_d(addr, &read_stall_cycles, current_cycle);
     dcache_dirty[addr%dcache_size] = true;
-    *stall_cycles = 0;
+    *stall_cycles = read_stall_cycles;
   }
 
   memory[addr] = block;
@@ -261,6 +286,9 @@ bool clock() {
     printf("Simulation Results:\n\nReserved Memory:\n Location | Val (hex) | Val (dec) \n        6 |  %08x | %d\n        7 |  %08x | %d\n        8 |  %08x | %d\n        9 |  %08x | %d\n", read_memory(6), read_memory(6), read_memory(7), read_memory(7), read_memory(8), read_memory(8), read_memory(9), read_memory(9));
 
     printf("\nTotal Clock Cycles: %lu\n", clock_cycles);
+
+    printf("I Cache Hit Rate: %f%%\n", 100*((double) icache_hit/((double) icache_hit + (double) icache_miss)));
+    printf("D Cache Hit Rate: %f%%\n", 100*((double) dcache_hit/((double) dcache_hit + (double) dcache_miss)));
     return false;
   }
   return true;
@@ -595,7 +623,7 @@ void MEM() {
             data |= EXMEM.data.rt & 0xFF;
             break;
         }
-        write_d(word_addr, data, &stall_cycles);
+        write_d(word_addr, data, &stall_cycles, clock_cycles);
         break;
       case 0x29:
         //sh
@@ -610,11 +638,11 @@ void MEM() {
             data |= EXMEM.data.rt & 0xFFFF;
             break;
         }
-        write_d(word_addr, data, &stall_cycles);
+        write_d(word_addr, data, &stall_cycles, clock_cycles);
         break;
       case 0x2B:
         //sw
-        write_d(word_addr, EXMEM.data.rt, &stall_cycles);
+        write_d(word_addr, EXMEM.data.rt, &stall_cycles, clock_cycles);
         break;
     }
 
