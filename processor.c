@@ -22,6 +22,9 @@ unsigned int dcache_hit = 0;
 unsigned int icache_miss = 0;
 unsigned int dcache_miss = 0;
 
+int i_extra_stall = 0;
+int d_extra_stall = 0;
+
 void init_cache(int i_size, int d_size, int i_nblocks, int d_nblocks, bool WT) {
   write_through = WT;
   dcache_size = d_size;
@@ -67,6 +70,12 @@ void clear_cache() {
 }
 
 int read_i(int addr, int* stall_cycles, unsigned long current_cycle) {
+  if (!icache_size) {
+    *stall_cycles = 0;
+    return memory[addr];
+  }
+  i_extra_stall = 0;
+
   // tag | block number | block index
   //this tag includes 0 padding, basically just anding out lower bits
   //TODO: check that this actually works?
@@ -105,8 +114,12 @@ int read_i(int addr, int* stall_cycles, unsigned long current_cycle) {
       write_buffer_delay = write_buffer_avail - current_cycle;
     }
 
+    if (d_extra_stall) write_buffer_delay += d_extra_stall;
+
     //stall based on the current word needed
     *stall_cycles = 8 + 2*(addr%icache_nblocks) + write_buffer_delay;
+
+    i_extra_stall = 2*(3-addr%icache_nblocks);
 
     //fill up the "avail" section for this bucket with
     //when that word will be available.
@@ -120,8 +133,14 @@ int read_i(int addr, int* stall_cycles, unsigned long current_cycle) {
 }
 
 int read_d(int addr, int* stall_cycles, unsigned long current_cycle) {
+  if (!dcache_size) {
+    *stall_cycles = 0;
+    return memory[addr];
+  }
+  d_extra_stall = 0;
+
   //everything not commented is the same as the i cache
-  int tag = addr - addr%icache_size;
+  int tag = addr - addr%dcache_size;
   int bucket = addr%dcache_size - addr%dcache_nblocks;
 
   if (dcache_tags[bucket] == (tag | 0x80000000)) {
@@ -140,8 +159,11 @@ int read_d(int addr, int* stall_cycles, unsigned long current_cycle) {
     if (write_buffer_avail >= current_cycle) {
       write_buffer_delay = write_buffer_avail - current_cycle;
     }
+    if (i_extra_stall) write_buffer_delay += i_extra_stall;
 
     *stall_cycles = 8 + 2*(addr%dcache_nblocks) + write_buffer_delay;
+
+    d_extra_stall = 2*(3-addr%dcache_nblocks);
 
     int i;
     // we need to keep track of how many cycles to stall
@@ -239,6 +261,7 @@ void init(char* filename) {
 
   //initialize the cache
   init_cache(16, 256, 1, 1, false);
+  //init_cache(0, 256, 1, 1, false);
 
   FILE* fp = fopen(filename, "r");
   char buf[100];
@@ -354,8 +377,10 @@ bool clock() {
     printf("Total Instructions: %lu\n", n_instructions);
     printf("CPI: %f\n\n", (double) clock_cycles / (double) n_instructions);
 
-    printf("I Cache Hit Rate: %f%%\n", 100*((double) icache_hit/((double) icache_hit + (double) icache_miss)));
-    printf("D Cache Hit Rate: %f%%\n", 100*((double) dcache_hit/((double) dcache_hit + (double) dcache_miss)));
+    if (icache_size)
+      printf("I Cache Hit Rate: %f%%\n", 100*((double) icache_hit/((double) icache_hit + (double) icache_miss)));
+    if (dcache_size)
+      printf("D Cache Hit Rate: %f%%\n", 100*((double) dcache_hit/((double) dcache_hit + (double) dcache_miss)));
     return false;
   }
   return true;
