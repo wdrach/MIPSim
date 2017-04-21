@@ -69,7 +69,8 @@ void clear_cache() {
 int read_i(int addr, int* stall_cycles, unsigned long current_cycle) {
   // tag | block number | block index
   //this tag includes 0 padding, basically just anding out lower bits
-  int tag = addr&(~icache_size);
+  //TODO: check that this actually works?
+  int tag = addr - addr%icache_size;
 
   //bucket includes 0 padding as well
   int bucket = addr%icache_size - addr%icache_nblocks;
@@ -97,14 +98,21 @@ int read_i(int addr, int* stall_cycles, unsigned long current_cycle) {
     //set the new tag, w/ valid bit
     icache_tags[bucket] = tag | 0x80000000;
 
+    //wait for the write to be done, if it is currently
+    //stalling memory
+    int write_buffer_delay = 0;
+    if (write_buffer_avail >= current_cycle) {
+      write_buffer_delay = write_buffer_avail - current_cycle;
+    }
+
     //stall based on the current word needed
-    *stall_cycles = 8 + 2*(addr%icache_nblocks);
+    *stall_cycles = 8 + 2*(addr%icache_nblocks) + write_buffer_delay;
 
     //fill up the "avail" section for this bucket with
     //when that word will be available.
     int i;
     for (i=0; i<icache_nblocks; i++) {
-      icache_avail[bucket + i] = current_cycle + 8 + 2*i;
+      icache_avail[bucket + i] = current_cycle + write_buffer_delay + 8 + 2*i;
     }
   }
 
@@ -113,7 +121,7 @@ int read_i(int addr, int* stall_cycles, unsigned long current_cycle) {
 
 int read_d(int addr, int* stall_cycles, unsigned long current_cycle) {
   //everything not commented is the same as the i cache
-  int tag = addr&(~dcache_size);
+  int tag = addr - addr%icache_size;
   int bucket = addr%dcache_size - addr%dcache_nblocks;
 
   if (dcache_tags[bucket] == (tag | 0x80000000)) {
@@ -127,14 +135,20 @@ int read_d(int addr, int* stall_cycles, unsigned long current_cycle) {
   else {
     dcache_miss++;
     dcache_tags[bucket] = tag | 0x80000000;
-    *stall_cycles = 8 + 2*(addr%dcache_nblocks);
+
+    int write_buffer_delay = 0;
+    if (write_buffer_avail >= current_cycle) {
+      write_buffer_delay = write_buffer_avail - current_cycle;
+    }
+
+    *stall_cycles = 8 + 2*(addr%dcache_nblocks) + write_buffer_delay;
 
     int i;
     // we need to keep track of how many cycles to stall
     // in the case of a write back
     int write_stall_cycles = 0;
     for (i=0; i<dcache_nblocks; i++) {
-      dcache_avail[bucket + i] = current_cycle + 8 + 2*i;
+      dcache_avail[bucket + i] = current_cycle + 8 + 2*i + write_buffer_delay;
       if (dcache_dirty[bucket + i]) {
         write_stall_cycles = 4 + i;
       }
@@ -168,16 +182,19 @@ int read_memory(int addr) {
 
 void write_d(int addr, int block, int* stall_cycles, int current_cycle) {
   if (write_through) {
+    int read_stall_cycles = 0;
+    read_d(addr, &read_stall_cycles, current_cycle);
+
     //if the write buffer is available, just write to that
     if (write_buffer_avail < current_cycle) {
       write_buffer_avail = current_cycle + 4 + (addr%dcache_nblocks);
-      *stall_cycles = 0;
+      *stall_cycles = read_stall_cycles;
     }
     //otherwise wait until the write buffer is available and then
     //you can write to it.
     else {
+      *stall_cycles = current_cycle - write_buffer_avail + read_stall_cycles;
       write_buffer_avail += 4 + (addr%dcache_nblocks);
-      *stall_cycles = current_cycle - write_buffer_avail;
     }
   }
   else {
@@ -212,11 +229,14 @@ bool branch_taken = false;
 int new_pc = 0;
 
 unsigned long clock_cycles = 0;
+unsigned long n_instructions = 0;
 
 //bools for stalling
 bool stall = false;
 
 void init(char* filename) {
+  clear_cache();
+
   //initialize the cache
   init_cache(16, 256, 1, 1, false);
 
@@ -321,12 +341,18 @@ bool clock() {
   clock_cycles += cache_stall_cycles;
   cache_stall_cycles = 0;
 
+  if (!stall) {
+    n_instructions++;
+  }
+
   //printf("pc: %d\n", pc);
 
   if (pc <= 0) {
     printf("Simulation Results:\n\nReserved Memory:\n Location | Val (hex) | Val (dec) \n        6 |  %08x | %d\n        7 |  %08x | %d\n        8 |  %08x | %d\n        9 |  %08x | %d\n", read_memory(6), read_memory(6), read_memory(7), read_memory(7), read_memory(8), read_memory(8), read_memory(9), read_memory(9));
 
     printf("\nTotal Clock Cycles: %lu\n", clock_cycles);
+    printf("Total Instructions: %lu\n", n_instructions);
+    printf("CPI: %f\n\n", (double) clock_cycles / (double) n_instructions);
 
     printf("I Cache Hit Rate: %f%%\n", 100*((double) icache_hit/((double) icache_hit + (double) icache_miss)));
     printf("D Cache Hit Rate: %f%%\n", 100*((double) dcache_hit/((double) dcache_hit + (double) dcache_miss)));
