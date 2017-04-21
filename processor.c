@@ -203,6 +203,11 @@ int read_memory(int addr) {
 }
 
 void write_d(int addr, int block, int* stall_cycles, int current_cycle) {
+  if (!dcache_size) {
+    *stall_cycles = 0;
+    memory[addr] = block;
+    return;
+  }
   if (write_through) {
     int read_stall_cycles = 0;
     read_d(addr, &read_stall_cycles, current_cycle);
@@ -261,7 +266,6 @@ void init(char* filename) {
 
   //initialize the cache
   init_cache(16, 256, 1, 1, false);
-  //init_cache(0, 256, 1, 1, false);
 
   FILE* fp = fopen(filename, "r");
   char buf[100];
