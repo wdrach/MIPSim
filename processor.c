@@ -7,15 +7,15 @@ int icache_size = 0;
 
 int dcache_nblocks = 0;
 int icache_nblocks = 0;
-int dcache_tags[128] = {0};
+int dcache_tags[256] = {0};
 int icache_tags[64] = {0};
 
 bool write_through = false;
-bool dcache_dirty[128] = {0};
-bool icache_dirty[64] = {0};
+bool dcache_dirty[256] = {0};
+
 
 unsigned long icache_avail[64] = {0};
-unsigned long dcache_avail[128] = {0};
+unsigned long dcache_avail[256] = {0};
 
 void init_cache(int i_size, int d_size, int i_nblocks, int d_nblocks, bool WT) {
   write_through = WT;
@@ -38,7 +38,6 @@ void clear_cache() {
   for (i=0; i<128; i++) {
     if (i<64) {
       icache_tags[i] = 0;
-      icache_dirty[i] = false;
       icache_avail[i] = 0;
     }
 
@@ -55,7 +54,6 @@ void clear_cache() {
   write_through = false;
 }
 
-//TODO: add write back to this
 int read_i(int addr, int* stall_cycles, unsigned long current_cycle) {
   // tag | block number | block index
   int tag = addr&(~icache_size);
@@ -76,14 +74,13 @@ int read_i(int addr, int* stall_cycles, unsigned long current_cycle) {
 
     int i;
     for (i=0; i<icache_nblocks; i++) {
-      icache_avail[bucket + i] = 8 + 2*i;
+      icache_avail[bucket + i] = current_cycle + 8 + 2*i;
     }
   }
 
   return memory[addr];
 }
 
-//TODO: add write back to this
 int read_d(int addr, int* stall_cycles, unsigned long current_cycle) {
   // tag | block number | block index
   int tag = addr&(~dcache_size);
@@ -103,9 +100,16 @@ int read_d(int addr, int* stall_cycles, unsigned long current_cycle) {
     *stall_cycles = 8 + 2*(addr%dcache_nblocks);
 
     int i;
+    int write_stall_cycles = 0;
     for (i=0; i<dcache_nblocks; i++) {
-      dcache_avail[bucket + i] = 8 + 2*i;
+      dcache_avail[bucket + i] = current_cycle + 8 + 2*i;
+      if (dcache_dirty[bucket + i]) {
+        write_stall_cycles = 4 + i;
+      }
+      dcache_dirty[bucket + i] = false;
     }
+
+    *stall_cycles += write_stall_cycles;
   }
 
   return memory[addr];
@@ -115,15 +119,15 @@ int read_memory(int addr) {
   return memory[addr];
 }
 
-void write_i(int addr, int block) {
-  //TODO: write to cache and/or main memory based on
-  //      write_through flag
-  memory[addr] = block;
-}
+void write_d(int addr, int block, int* stall_cycles) {
+  if (write_through) {
+    *stall_cycles = 4 + (addr%dcache_nblocks);
+  }
+  else {
+    dcache_dirty[addr%dcache_size] = true;
+    *stall_cycles = 0;
+  }
 
-void write_d(int addr, int block) {
-  //TODO: write to cache and/or main memory based on
-  //      write_through flag
   memory[addr] = block;
 }
 
@@ -133,6 +137,7 @@ void write_memory(int addr, int block) {
 
 //processor stuff
 int mem_start = 0;
+int cache_stall_cycles = 0;
 int registers[32] = {0};
 int pc = 1;
 
@@ -147,7 +152,7 @@ bool stall = false;
 
 void init(char* filename) {
   //initialize the cache
-  init_cache(64, 128, 4, 4, true);
+  init_cache(16, 256, 1, 1, false);
 
   FILE* fp = fopen(filename, "r");
   char buf[100];
@@ -247,6 +252,8 @@ bool clock() {
   }
 
   clock_cycles++;
+  clock_cycles += cache_stall_cycles;
+  cache_stall_cycles = 0;
 
   //printf("pc: %d\n", pc);
 
@@ -312,6 +319,7 @@ void IF() {
 
   int stall_cycles = 0;
   IFID.instruction = read_i(pc, &stall_cycles, clock_cycles);
+  cache_stall_cycles += stall_cycles;
 
   //increment PC
   pc++;
@@ -505,6 +513,7 @@ void MEM() {
 
     int stall_cycles = 0;
     int full_word = read_d((addr - mem_start)/4, &stall_cycles, clock_cycles);
+    cache_stall_cycles += stall_cycles;
     //printf("%d: reading %d from %d\n", EXMEM.pc, full_word, addr);
 
     //temp variable for signed halfwords
@@ -586,7 +595,7 @@ void MEM() {
             data |= EXMEM.data.rt & 0xFF;
             break;
         }
-        write_d(word_addr, data);
+        write_d(word_addr, data, &stall_cycles);
         break;
       case 0x29:
         //sh
@@ -601,13 +610,15 @@ void MEM() {
             data |= EXMEM.data.rt & 0xFFFF;
             break;
         }
-        write_d(word_addr, data);
+        write_d(word_addr, data, &stall_cycles);
         break;
       case 0x2B:
         //sw
-        write_d(word_addr, EXMEM.data.rt);
+        write_d(word_addr, EXMEM.data.rt, &stall_cycles);
         break;
     }
+
+    cache_stall_cycles += stall_cycles;
   }
 }
 
