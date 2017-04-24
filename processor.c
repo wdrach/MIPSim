@@ -220,7 +220,7 @@ void write_d(int addr, int block, int* stall_cycles, int current_cycle) {
     //otherwise wait until the write buffer is available and then
     //you can write to it.
     else {
-      *stall_cycles = current_cycle - write_buffer_avail + read_stall_cycles;
+      *stall_cycles = write_buffer_avail - current_cycle + read_stall_cycles;
       write_buffer_avail += 4 + (addr%dcache_nblocks);
     }
   }
