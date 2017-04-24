@@ -390,33 +390,41 @@ bool clock() {
   return true;
 }
 
-void forward() {
+int forward() {
   //this is split out because branch instructions run this in the
   //ID stage seperate from the hazard detection
   bool got_rt = false;
   bool got_rs = false;
 
+  int stall_cycles = 0;
+
   if (EXMEM.reg_write && EXMEM.instruction.dest != 0) {
     if (EXMEM.instruction.dest == IDEX.instruction.rs) {
       IDEX.data.rs = EXMEM.data.ALU_result;
       got_rs = true;
+      stall_cycles = 1;
     }
 
     if (EXMEM.instruction.dest == IDEX.instruction.rt) {
       IDEX.data.rt = EXMEM.data.ALU_result;
       got_rt = true;
+      stall_cycles = 1;
     }
   }
 
   if (MEMWB.reg_write && MEMWB.instruction.dest != 0) {
     if (MEMWB.instruction.dest == IDEX.instruction.rs && !got_rs) {
       IDEX.data.rs = MEMWB.mem_to_reg ? MEMWB.data.mem : MEMWB.data.ALU_result;
+      stall_cycles = 2;
     }
 
     if (MEMWB.instruction.dest == IDEX.instruction.rt && !got_rt) {
       IDEX.data.rt = MEMWB.mem_to_reg ? MEMWB.data.mem : MEMWB.data.ALU_result;
+      stall_cycles = 2;
     }
   }
+
+  return stall_cycles;
 }
 
 void hazard_detection() {
@@ -550,7 +558,7 @@ void ID() {
 
       //branch instructions need forwarding to the ID stage, so
       //make sure we do that
-      forward();
+      cache_stall_cycles += forward();
 
       switch (opcode) {
         case 0x04:
