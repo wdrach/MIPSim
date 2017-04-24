@@ -97,7 +97,7 @@ MEMWBreg MEMWB;
 
 int ALU(read_data data, inst instruction);
 
-void init(char* filename);
+void init(char* filename, int icache_size, int dcache_size, int block_size, bool WT);
 
 void hazard_detection();
 

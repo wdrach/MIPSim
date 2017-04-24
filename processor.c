@@ -261,11 +261,11 @@ unsigned long n_instructions = 0;
 //bools for stalling
 bool stall = false;
 
-void init(char* filename) {
+void init(char* filename, int icache_size, int dcache_size, int block_size, bool WT) {
   clear_cache();
 
   //initialize the cache
-  init_cache(16, 256, 1, 1, false);
+  init_cache(icache_size/4, dcache_size/4, block_size, block_size, WT);
 
   FILE* fp = fopen(filename, "r");
   char buf[100];

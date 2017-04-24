@@ -6,7 +6,7 @@ int main(int argc, char* argv[]) {
     printf("USAGE: ./run_sim <program_location>\n");
     return 0;
   }
-  init(argv[1]);
+  init(argv[1], 64, 1024, 1, false);
 
   while(clock())
     ;
