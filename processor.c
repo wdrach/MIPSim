@@ -415,12 +415,12 @@ int forward() {
   if (MEMWB.reg_write && MEMWB.instruction.dest != 0) {
     if (MEMWB.instruction.dest == IDEX.instruction.rs && !got_rs) {
       IDEX.data.rs = MEMWB.mem_to_reg ? MEMWB.data.mem : MEMWB.data.ALU_result;
-      stall_cycles = 2;
+      stall_cycles = 1;
     }
 
     if (MEMWB.instruction.dest == IDEX.instruction.rt && !got_rt) {
       IDEX.data.rt = MEMWB.mem_to_reg ? MEMWB.data.mem : MEMWB.data.ALU_result;
-      stall_cycles = 2;
+      stall_cycles = 1;
     }
   }
 
