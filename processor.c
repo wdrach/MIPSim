@@ -14,7 +14,6 @@ bool write_through = false;
 bool dcache_dirty[256] = {0};
 
 unsigned long icache_avail[64] = {0};
-unsigned long dcache_avail[256] = {0};
 unsigned long write_buffer_avail = 0;
 
 unsigned int icache_hit = 0;
@@ -23,7 +22,6 @@ unsigned int icache_miss = 0;
 unsigned int dcache_miss = 0;
 
 int i_extra_stall = 0;
-int d_extra_stall = 0;
 
 void init_cache(int i_size, int d_size, int i_nblocks, int d_nblocks, bool WT) {
   write_through = WT;
@@ -38,10 +36,6 @@ void init_cache(int i_size, int d_size, int i_nblocks, int d_nblocks, bool WT) {
 }
 
 void clear_cache() {
-  if (!write_through) {
-    //TODO: write everything that is dirty to memory
-  }
-
   int i, j;
   for (i=0; i<256; i++) {
     if (i<64) {
@@ -51,7 +45,6 @@ void clear_cache() {
 
     dcache_tags[i] = 0;
     dcache_dirty[i] = false;
-    dcache_avail[i] = 0;
   }
 
   icache_size = 0;
@@ -78,7 +71,6 @@ int read_i(int addr, int* stall_cycles, unsigned long current_cycle) {
 
   // tag | block number | block index
   //this tag includes 0 padding, basically just anding out lower bits
-  //TODO: check that this actually works?
   int tag = addr - addr%icache_size;
 
   //bucket includes 0 padding as well
@@ -114,8 +106,6 @@ int read_i(int addr, int* stall_cycles, unsigned long current_cycle) {
       write_buffer_delay = write_buffer_avail - current_cycle;
     }
 
-    if (d_extra_stall) write_buffer_delay += d_extra_stall;
-
     //stall based on the current word needed
     *stall_cycles = 8 + 2*(addr%icache_nblocks) + write_buffer_delay;
 
@@ -137,7 +127,6 @@ int read_d(int addr, int* stall_cycles, unsigned long current_cycle) {
     *stall_cycles = 0;
     return memory[addr];
   }
-  d_extra_stall = 0;
 
   //everything not commented is the same as the i cache
   int tag = addr - addr%dcache_size;
@@ -145,11 +134,7 @@ int read_d(int addr, int* stall_cycles, unsigned long current_cycle) {
 
   if (dcache_tags[bucket] == (tag | 0x80000000)) {
     dcache_hit++;
-    unsigned long avail = dcache_avail[addr%dcache_size];
-    if (avail <= current_cycle) 
-      *stall_cycles = 0;
-    else
-      *stall_cycles = avail - current_cycle;
+    *stall_cycles = 0;
   }
   else {
     dcache_miss++;
@@ -161,18 +146,15 @@ int read_d(int addr, int* stall_cycles, unsigned long current_cycle) {
     }
     if (i_extra_stall) write_buffer_delay += i_extra_stall;
 
-    *stall_cycles = 8 + 2*(addr%dcache_nblocks) + write_buffer_delay;
-
-    d_extra_stall = 2*(3-addr%dcache_nblocks);
+    *stall_cycles = 8 + 2*(dcache_nblocks-1) + write_buffer_delay;
 
     int i;
     // we need to keep track of how many cycles to stall
     // in the case of a write back
     int write_stall_cycles = 0;
     for (i=0; i<dcache_nblocks; i++) {
-      dcache_avail[bucket + i] = current_cycle + 8 + 2*i + write_buffer_delay;
       if (dcache_dirty[bucket + i]) {
-        write_stall_cycles = 4 + i;
+        write_stall_cycles = 6 + 2*i;
       }
 
       //clear dirty bit
@@ -184,13 +166,12 @@ int read_d(int addr, int* stall_cycles, unsigned long current_cycle) {
       //if the write buffer is availabe, put it in the write buffer
       if (write_buffer_avail < current_cycle) {
         //also have to wait 14 cycles for the read to finish first
-        write_buffer_avail = current_cycle + 14 + write_stall_cycles;
+        write_buffer_avail = current_cycle + 8 + 2*(dcache_nblocks-1) + write_stall_cycles;
       }
       else {
         //otherwise, stall until the write buffer is available and
         //then read/write
-        *stall_cycles += write_buffer_avail - current_cycle;
-        write_buffer_avail += write_stall_cycles + 14;
+        write_buffer_avail += write_stall_cycles + 8 + 2*(dcache_nblocks-1);
       }
     }
   }
@@ -214,14 +195,14 @@ void write_d(int addr, int block, int* stall_cycles, int current_cycle) {
 
     //if the write buffer is available, just write to that
     if (write_buffer_avail < current_cycle) {
-      write_buffer_avail = current_cycle + 4 + (addr%dcache_nblocks);
+      write_buffer_avail = current_cycle + 6 + 2*(addr%dcache_nblocks);
       *stall_cycles = read_stall_cycles;
     }
     //otherwise wait until the write buffer is available and then
     //you can write to it.
     else {
       *stall_cycles = write_buffer_avail - current_cycle + read_stall_cycles;
-      write_buffer_avail += 4 + (addr%dcache_nblocks);
+      write_buffer_avail += 6 + 2*(addr%dcache_nblocks);
     }
   }
   else {
@@ -828,7 +809,7 @@ int ALU(read_data data, inst instruction) {
     //--------
     case 0x1F:
       //seb
-      if (funct == 0x20) return (int) ((char) (data.rt & 0xFF));
+      if (funct == 0x20 && instruction.shamt == 0x10) return data.rt&0x80 ? data.rt|0xFFFFFF00 : data.rt&0x000000FF;
       break;
     case 0x00:
       switch (funct) {
