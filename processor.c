@@ -517,10 +517,10 @@ void ID() {
     //I instructions
     IDEX.instruction.rs = (instruction&0x03E00000)>>21;
     IDEX.instruction.rt = (instruction&0x001F0000)>>16;
-    IDEX.instruction.immediate = (int) ((short int) (instruction&0x0000FFFF));
+    IDEX.instruction.immediate = instruction&0x0000FFFF;
 
     //fill data
-    IDEX.data.immediate = IDEX.instruction.immediate;
+    IDEX.data.immediate = (int) ((short int) (IDEX.instruction.immediate));
     IDEX.data.rs = registers[IDEX.instruction.rs];
     IDEX.data.rt = registers[IDEX.instruction.rt];
 
@@ -787,10 +787,10 @@ int ALU(read_data data, inst instruction) {
       return data.rs < data.immediate;
     case 0x0B:
       //sltiu
-      return (unsigned int) data.rs < (data.immediate & 0x0000FFFF);
+      return (unsigned int) data.rs < (instruction.immediate & 0x0000FFFF);
     case 0x0F:
       //lui
-      return data.immediate << 16;
+      return (data.immediate << 16)&0xFFFF0000;
 
     //------------
     // load/store
