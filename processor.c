@@ -154,7 +154,7 @@ int read_d(int addr, int* stall_cycles, unsigned long current_cycle) {
     int write_stall_cycles = 0;
     for (i=0; i<dcache_nblocks; i++) {
       if (dcache_dirty[bucket + i]) {
-        write_stall_cycles = 6 + 2*i;
+        write_stall_cycles = 6 + 2*(dcache_nblocks-1);
       }
 
       //clear dirty bit
@@ -195,14 +195,14 @@ void write_d(int addr, int block, int* stall_cycles, int current_cycle) {
 
     //if the write buffer is available, just write to that
     if (write_buffer_avail < current_cycle) {
-      write_buffer_avail = current_cycle + 6 + 2*(addr%dcache_nblocks);
+      write_buffer_avail = current_cycle + 6;
       *stall_cycles = read_stall_cycles;
     }
     //otherwise wait until the write buffer is available and then
     //you can write to it.
     else {
       *stall_cycles = write_buffer_avail - current_cycle + read_stall_cycles;
-      write_buffer_avail += 6 + 2*(addr%dcache_nblocks);
+      write_buffer_avail += 6;
     }
   }
   else {
